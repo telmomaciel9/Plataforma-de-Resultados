@@ -2,7 +2,7 @@
 
 Mobile-first web app for the sports tournament at **Gata na Praia 2026**, an event organised by the University of Minho Students' Union (AAUMinho). Players and spectators follow fixtures and results for **volleyball, handball and football**, while the organisers update scores from an authenticated admin area.
 
-<img src="docs/screenshot.png" alt="Handball knockout results on a phone" width="300" />
+<img src="screenshot.png" alt="Handball knockout results on a phone" width="300" />
 
 ## Features
 
