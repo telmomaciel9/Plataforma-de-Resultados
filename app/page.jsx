@@ -1,16 +1,11 @@
 "use client";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Trophy, RefreshCw, Lock, LogOut, Plus, Save, Trash2, Edit3
 } from "lucide-react";
-import { resolveTournament, winnerOf } from "@/lib/tournament";
+import { addEdit, applyEdits, publishEdits, resolveTournament, winnerOf } from "@/lib/tournament";
+import { appStateStore, loadAppState, subscribeToAppState, supabase } from "@/lib/appState";
 
-// --- CONFIGURAÇÃO SUPABASE ---
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const STATE_ROW_ID = "gata-na-praia-2026-official";
 const GROUPS = ["A", "B", "C", "D"];
 
 // --- COMPONENTES VISUAIS ESTILIZADOS ---
@@ -30,12 +25,18 @@ function matchesOf(state, modality, group) {
     : state.groups?.[modality]?.[group]?.matches || [];
 }
 
+function describeConflict({ edit, reason, current }) {
+  if (reason === "missing") return `Um jogo que alteraste já tinha sido apagado por outro admin (${edit.matchId}).`;
+  return `${edit.matchId}: outro admin tinha mudado "${current}"; ficou o teu valor "${edit.to}".`;
+}
+
 export default function Page() {
-  // published = o que está no Supabase (separador Público); draft = edições do admin por publicar.
+  // published = o que está no Supabase (separador Público), atualizado em tempo real.
+  // edits = alterações do admin por publicar; o rascunho é published + edits, por isso
+  // o que outros admins publicam aparece logo no rascunho sem perder as edições.
   const [published, setPublished] = useState(null);
-  const [draft, setDraft] = useState(null);
-  const [dirty, setDirty] = useState(false);
-  const dirtyRef = useRef(false);
+  const [edits, setEdits] = useState([]);
+  const [live, setLive] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [user, setUser] = useState(null);
@@ -49,46 +50,59 @@ export default function Page() {
   const [loginError, setLoginError] = useState(null);
   const [loggingIn, setLoggingIn] = useState(false);
 
+  const dirty = edits.length > 0;
+
+  const fetchData = useCallback(async () => {
+    try {
+      const { state } = await loadAppState();
+      setPublished(state);
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(error.message);
+    }
+  }, []);
+
   useEffect(() => {
     fetchData();
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
-    return () => authListener.subscription.unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const unsubscribe = subscribeToAppState(({ state }) => setPublished(state), setLive);
+    // Telemóveis cortam a ligação em segundo plano: ao voltar à página, vai buscar o mais recente.
+    const onVisible = () => { if (document.visibilityState === "visible") fetchData(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      authListener.subscription.unsubscribe();
+      unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [fetchData]);
 
   // Avisa antes de fechar ou recarregar a página com alterações por publicar.
   useEffect(() => {
-    dirtyRef.current = dirty;
     if (!dirty) return;
     const warn = (e) => { e.preventDefault(); e.returnValue = ""; };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
-  async function fetchData() {
-    setLoadError(null);
-    const { data: res, error } = await supabase.from("app_state").select("payload").eq("id", STATE_ROW_ID).single();
-    if (error || !res) {
-      setLoadError(error?.message || "Torneio não encontrado.");
-      return;
-    }
-    setPublished(res.payload);
-    // Não deita fora edições do admin que ainda não foram publicadas.
-    if (!dirtyRef.current) setDraft(res.payload);
-  }
-
   const saveAll = async () => {
     setSaving(true);
-    const { error } = await supabase.from("app_state").update({ payload: draft }).eq("id", STATE_ROW_ID);
-    setSaving(false);
-    if (error) {
+    try {
+      const result = await publishEdits(appStateStore, edits);
+      if (!result.ok) {
+        alert("Outros admins estão a publicar ao mesmo tempo. As tuas alterações continuam aqui; tenta de novo.");
+        return;
+      }
+      setPublished(result.state);
+      setEdits([]);
+      alert(result.conflicts.length
+        ? "Publicado, mas com avisos:\n\n" + result.conflicts.map(describeConflict).join("\n")
+        : "Alterações publicadas com sucesso!");
+    } catch (error) {
       alert("Erro ao guardar: " + error.message);
-      return;
+    } finally {
+      setSaving(false);
     }
-    setDirty(false);
-    setPublished(draft);
-    alert("Alterações publicadas com sucesso!");
   };
 
   const login = async (e) => {
@@ -100,32 +114,26 @@ export default function Page() {
     if (error) setLoginError(error.message === "Invalid login credentials" ? "Email ou password incorretos." : error.message);
   };
 
-  const editDraft = (change) => {
-    const newData = JSON.parse(JSON.stringify(draft));
-    const list = group === "Finais" ? newData.finals[modality] : newData.groups[modality][group].matches;
-    change(newData, list);
-    setDraft(newData);
-    setDirty(true);
-  };
+  const draft = useMemo(() => (published ? applyEdits(published, edits).state : null), [published, edits]);
 
-  const updateMatch = (matchId, field, value) => editDraft((_, list) => {
-    const match = list.find(m => m.id === matchId);
-    if (match) match[field] = value;
-  });
+  const updateMatch = (match, field, value) =>
+    setEdits((list) => addEdit(list, { type: "update", matchId: match.id, field, from: match[field] ?? "", to: value }));
 
   const addMatch = () => {
     const id = `${modality[0]}-${group[0]}-${Date.now()}`;
-    editDraft((_, list) => list.push({ ...newMatch, id, homeScore: "", awayScore: "" }));
+    const match = { ...newMatch, id, homeScore: "", awayScore: "" };
+    setEdits((list) => addEdit(list, { type: "add", modality, group, match }));
     setShowAddModal(false);
     setNewMatch({ home: "", away: "", stage: defaultStage(group) });
   };
 
   const deleteMatch = (matchId) => {
     if (!confirm("Apagar este jogo?")) return;
-    editDraft((newData) => {
-      if (group === "Finais") newData.finals[modality] = newData.finals[modality].filter(m => m.id !== matchId);
-      else newData.groups[modality][group].matches = newData.groups[modality][group].matches.filter(m => m.id !== matchId);
-    });
+    setEdits((list) => addEdit(list, { type: "delete", matchId }));
+  };
+
+  const discardEdits = () => {
+    if (confirm("Descartar todas as alterações por publicar?")) setEdits([]);
   };
 
   const changeGroup = (value) => {
@@ -190,9 +198,15 @@ export default function Page() {
           <Card>
             <CardHeader>
                 <CardTitle>{modality} — {group === "Finais" ? "Fase Final" : `Grupo ${group}`}</CardTitle>
-                <button onClick={fetchData} aria-label="Atualizar resultados" className="text-slate-400 hover:text-indigo-600 transition-colors">
-                  <RefreshCw size={14} />
-                </button>
+                {live ? (
+                  <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-600" title="Os resultados atualizam-se sozinhos">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Ao vivo
+                  </span>
+                ) : (
+                  <button onClick={fetchData} aria-label="Atualizar resultados" className="text-slate-400 hover:text-indigo-600 transition-colors">
+                    <RefreshCw size={14} />
+                  </button>
+                )}
             </CardHeader>
             <CardContent className="divide-y divide-slate-50">
               {publicMatches.length > 0 ? publicMatches.map(m => {
@@ -234,7 +248,12 @@ export default function Page() {
                     <Save size={18} /> {saving ? "..." : "PUBLICAR"}
                   </button>
                 </div>
-                {dirty && <p className="text-xs font-bold text-amber-600 text-center">Tens alterações por publicar.</p>}
+                {dirty && (
+                  <p className="text-xs font-bold text-amber-600 text-center">
+                    {edits.length === 1 ? "1 alteração por publicar." : `${edits.length} alterações por publicar.`}{" "}
+                    <button onClick={discardEdits} className="underline text-slate-500 hover:text-red-600">Descartar</button>
+                  </p>
+                )}
 
                 <div className="space-y-3">
                   {draftMatches.map(m => (
@@ -243,16 +262,16 @@ export default function Page() {
 
                       <div className="flex items-center gap-2 mb-3">
                         <Edit3 size={12} className="text-slate-400" />
-                        <input value={m.stage} onChange={e => updateMatch(m.id, 'stage', e.target.value)} className="text-[10px] font-black text-indigo-500 uppercase bg-transparent w-full outline-none" placeholder="EX: FINAL" />
+                        <input value={m.stage} onChange={e => updateMatch(m,'stage', e.target.value)} className="text-[10px] font-black text-indigo-500 uppercase bg-transparent w-full outline-none" placeholder="EX: FINAL" />
                       </div>
 
                       <div className="flex items-center gap-4 mb-3">
-                        <input value={m.homeScore} inputMode="numeric" onChange={e => updateMatch(m.id, 'homeScore', e.target.value)} className="w-12 h-12 text-center font-black bg-slate-50 rounded-xl ring-2 ring-slate-100 focus:ring-indigo-500 outline-none text-lg" placeholder="–" />
-                        <input value={m.home} onChange={e => updateMatch(m.id, 'home', e.target.value)} className="text-sm font-bold text-slate-700 flex-1 bg-transparent border-b border-transparent focus:border-slate-100 outline-none" />
+                        <input value={m.homeScore} inputMode="numeric" onChange={e => updateMatch(m,'homeScore', e.target.value)} className="w-12 h-12 text-center font-black bg-slate-50 rounded-xl ring-2 ring-slate-100 focus:ring-indigo-500 outline-none text-lg" placeholder="–" />
+                        <input value={m.home} onChange={e => updateMatch(m,'home', e.target.value)} className="text-sm font-bold text-slate-700 flex-1 bg-transparent border-b border-transparent focus:border-slate-100 outline-none" />
                       </div>
                       <div className="flex items-center gap-4">
-                        <input value={m.awayScore} inputMode="numeric" onChange={e => updateMatch(m.id, 'awayScore', e.target.value)} className="w-12 h-12 text-center font-black bg-slate-50 rounded-xl ring-2 ring-slate-100 focus:ring-indigo-500 outline-none text-lg" placeholder="–" />
-                        <input value={m.away} onChange={e => updateMatch(m.id, 'away', e.target.value)} className="text-sm font-bold text-slate-700 flex-1 bg-transparent border-b border-transparent focus:border-slate-100 outline-none" />
+                        <input value={m.awayScore} inputMode="numeric" onChange={e => updateMatch(m,'awayScore', e.target.value)} className="w-12 h-12 text-center font-black bg-slate-50 rounded-xl ring-2 ring-slate-100 focus:ring-indigo-500 outline-none text-lg" placeholder="–" />
+                        <input value={m.away} onChange={e => updateMatch(m,'away', e.target.value)} className="text-sm font-bold text-slate-700 flex-1 bg-transparent border-b border-transparent focus:border-slate-100 outline-none" />
                       </div>
                     </Card>
                   ))}
