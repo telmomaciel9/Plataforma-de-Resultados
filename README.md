@@ -1,0 +1,98 @@
+# Gata na Praia ’26 · Tournament Results
+
+Mobile-first web app for the sports tournament at **Gata na Praia 2026**, an event organised by the University of Minho Students' Union (AAUMinho). Players and spectators follow fixtures and results for **volleyball, handball and football**, while the organisers update scores from an authenticated admin area.
+
+<img src="docs/screenshot.png" alt="Handball knockout results on a phone" width="300" />
+
+## Features
+
+**Public view**
+- Pick a sport and a group (A–D) or the knockout stage
+- See every match with its pitch, teams and score
+- Knockout stage with semi-finals, 3rd/4th place match and final
+
+**Admin view**
+- Email and password sign-in with Supabase Auth
+- Add, edit and delete matches in any group or in the knockout stage
+- Enter scores and publish all changes in one save
+
+All tournament data is stored as a single JSON document in Supabase (PostgreSQL), so the structure of groups and stages can change without database migrations.
+
+## Tech stack
+
+| | |
+|---|---|
+| Framework | Next.js 14 (App Router), React 18 |
+| Backend | Supabase: PostgreSQL and Auth |
+| Styling | Tailwind CSS 3, Lucide icons |
+
+## Getting started
+
+Requirements: Node.js 18 or newer and a free [Supabase](https://supabase.com) project.
+
+**1. Install**
+
+```bash
+git clone https://github.com/telmomaciel9/gata.git
+cd gata
+npm install
+```
+
+**2. Configure Supabase.** Create a `.env.local` file:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
+```
+
+**3. Create the table** in the Supabase SQL editor:
+
+```sql
+create table app_state (
+  id text primary key,
+  payload jsonb not null,
+  updated_at timestamptz default now()
+);
+```
+
+Insert one row with `id = 'gata-na-praia-2026-official'`. Its `payload` follows this shape:
+
+```json
+{
+  "groups": {
+    "Voleibol": { "A": { "matches": [] }, "B": { "matches": [] }, "C": { "matches": [] }, "D": { "matches": [] } },
+    "Andebol":  { "A": { "matches": [] }, "B": { "matches": [] }, "C": { "matches": [] }, "D": { "matches": [] } },
+    "Futebol":  { "A": { "matches": [] }, "B": { "matches": [] }, "C": { "matches": [] }, "D": { "matches": [] } }
+  },
+  "finals": { "Voleibol": [], "Andebol": [], "Futebol": [] }
+}
+```
+
+Each match is stored as `{ "id", "home", "away", "homeScore", "awayScore", "stage" }`.
+
+**4. Create the admin users** under Authentication → Users in Supabase.
+
+**5. Run**
+
+```bash
+npm run dev
+```
+
+The app runs at `http://localhost:3000`.
+
+## Project structure
+
+```
+app/
+├── layout.jsx                  # Root layout and metadata
+├── page.jsx                    # The app: public view and admin panel
+└── globals.css                 # Tailwind entry point
+page.jsx                        # Prototype: real-time updates and automatic bracket resolution
+gata_na_praia_mobile_app.jsx    # Prototype: shadcn/ui version with offline demo mode
+```
+
+The two files at the root are earlier prototypes and are not served by Next.js. They explore real-time score updates with Supabase Realtime, automatic progression of winners from groups to the final, and an offline demo mode backed by `localStorage`.
+
+## Author
+
+**Telmo Maciel** · [GitHub](https://github.com/telmomaciel9) · [LinkedIn](https://www.linkedin.com/in/telmo-maciel/)
