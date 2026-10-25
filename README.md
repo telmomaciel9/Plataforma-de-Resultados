@@ -15,6 +15,9 @@ Mobile-first web app for the sports tournament at **Gata na Praia 2026**, an eve
 - Email and password sign-in with Supabase Auth
 - Add, edit and delete matches in any group or in the knockout stage
 - Enter scores and publish all changes in one save
+- Several admins can publish at the same time: only the matches each one changed are written, on top of the latest version, and they are told when they overwrote someone else's value
+
+**Live updates:** scores change on every open phone as soon as they are published (Supabase Realtime).
 
 All tournament data is stored as a single JSON document in Supabase (PostgreSQL), so the structure of groups and stages can change without database migrations.
 
@@ -81,6 +84,8 @@ Each match is stored as `{ "id", "home", "away", "homeScore", "awayScore", "stag
 
 **4. Lock down the table.** The anon key ships to every browser, so Row Level Security is what stops visitors from editing results. Run [`supabase/policies.sql`](supabase/policies.sql) in the SQL editor: everyone can read, only signed-in admins can update, and nobody can insert or delete rows from the app.
 
+Then run [`supabase/realtime-e-versao.sql`](supabase/realtime-e-versao.sql). It adds a `version` column that every save bumps, so two admins publishing at once never overwrite each other, and turns on Realtime for the table. The app still works without it, with no live updates and last save wins.
+
 **5. Create the admin users** under Authentication → Users in Supabase.
 
 **6. Run**
@@ -110,7 +115,9 @@ app/
 ├── page.jsx                    # The app: public view and admin panel
 └── globals.css                 # Tailwind entry point
 lib/tournament/                 # Tournament logic in TypeScript (no React or Supabase), with tests
+lib/appState.ts                 # Supabase: load, versioned save, live subscription
 supabase/policies.sql           # Row Level Security for app_state
+supabase/realtime-e-versao.sql  # Version column and Realtime for app_state
 prototypes/
 ├── page.jsx                    # Prototype: real-time updates and automatic bracket resolution
 └── gata_na_praia_mobile_app.jsx  # Prototype: shadcn/ui version with offline demo mode
