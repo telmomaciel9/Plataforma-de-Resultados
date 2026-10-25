@@ -28,7 +28,7 @@ All tournament data is stored as a single JSON document in Supabase (PostgreSQL)
 
 ## Getting started
 
-Requirements: Node.js 18 or newer and a free [Supabase](https://supabase.com) project.
+Requirements: Node.js 20 or newer and a free [Supabase](https://supabase.com) project.
 
 **1. Install**
 
@@ -59,6 +59,7 @@ Insert one row with `id = 'gata-na-praia-2026-official'`. Its `payload` follows 
 
 ```json
 {
+  "modalities": ["Voleibol", "Andebol", "Futebol"],
   "groups": {
     "Voleibol": { "A": { "matches": [] }, "B": { "matches": [] }, "C": { "matches": [] }, "D": { "matches": [] } },
     "Andebol":  { "A": { "matches": [] }, "B": { "matches": [] }, "C": { "matches": [] }, "D": { "matches": [] } },
@@ -68,17 +69,38 @@ Insert one row with `id = 'gata-na-praia-2026-official'`. Its `payload` follows 
 }
 ```
 
-Each match is stored as `{ "id", "home", "away", "homeScore", "awayScore", "stage" }`.
+Each match is stored as `{ "id", "home", "away", "homeScore", "awayScore", "stage" }`, plus an optional `tiebreakWinner` for drawn knockout games. Scores are strings and stay `""` until the game is played.
 
-**4. Create the admin users** under Authentication → Users in Supabase.
+`home` and `away` are usually team names, but they can also point to another game, and the public view fills them in once that game has a result:
 
-**5. Run**
+| Slot | Meaning |
+|---|---|
+| `WIN:<match id>` | Winner of that match |
+| `LOSS:<match id>` | Loser of that match (e.g. 3rd/4th place) |
+| `WIN_GROUP:<sport>:<group>` | Winner of the group: the winner of its last match, or of `finalMatchId` if the group sets one |
+
+**4. Lock down the table.** The anon key ships to every browser, so Row Level Security is what stops visitors from editing results. Run [`supabase/policies.sql`](supabase/policies.sql) in the SQL editor: everyone can read, only signed-in admins can update, and nobody can insert or delete rows from the app.
+
+**5. Create the admin users** under Authentication → Users in Supabase.
+
+**6. Run**
 
 ```bash
 npm run dev
 ```
 
 The app runs at `http://localhost:3000`.
+
+## Checks
+
+```bash
+npm run lint        # ESLint (next/core-web-vitals)
+npm run typecheck   # TypeScript
+npm test            # Vitest: tournament logic
+npm run build
+```
+
+GitHub Actions runs all four on every push and pull request. Vercel deploys `main` and creates a preview for each pull request.
 
 ## Project structure
 
@@ -87,11 +109,14 @@ app/
 ├── layout.jsx                  # Root layout and metadata
 ├── page.jsx                    # The app: public view and admin panel
 └── globals.css                 # Tailwind entry point
-page.jsx                        # Prototype: real-time updates and automatic bracket resolution
-gata_na_praia_mobile_app.jsx    # Prototype: shadcn/ui version with offline demo mode
+lib/tournament/                 # Tournament logic in TypeScript (no React or Supabase), with tests
+supabase/policies.sql           # Row Level Security for app_state
+prototypes/
+├── page.jsx                    # Prototype: real-time updates and automatic bracket resolution
+└── gata_na_praia_mobile_app.jsx  # Prototype: shadcn/ui version with offline demo mode
 ```
 
-The two files at the root are earlier prototypes and are not served by Next.js. They explore real-time score updates with Supabase Realtime, automatic progression of winners from groups to the final, and an offline demo mode backed by `localStorage`.
+The files in `prototypes/` are earlier versions and are not served by Next.js. They explore real-time score updates with Supabase Realtime, automatic progression of winners from groups to the final, and an offline demo mode backed by `localStorage`.
 
 ## Author
 
