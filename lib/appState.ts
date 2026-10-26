@@ -14,7 +14,7 @@ interface AppStateRow {
 }
 
 // select("*") em vez de "payload, version": continua a funcionar antes de a coluna
-// version existir (ver supabase/realtime-e-versao.sql).
+// version existir (ver supabase/schema.sql).
 export async function loadAppState(id: string): Promise<Snapshot> {
   const { data, error } = await supabase.from("app_state").select("*").eq("id", id).maybeSingle<AppStateRow>();
   if (error) throw new Error(error.message);
@@ -93,7 +93,7 @@ export async function createCompetition(id: string, state: TournamentState): Pro
   if (!error) return;
   if (error.code === "23505") throw new Error("Já existe uma competição com este endereço. Muda o nome ou a edição.");
   if (error.code === "42501") {
-    throw new Error("Sem permissão para criar competições. Corre supabase/competicoes.sql no Supabase e confirma a sessão de admin.");
+    throw new Error("Sem permissão para criar competições. Corre supabase/schema.sql no Supabase e confirma a sessão de admin.");
   }
   throw new Error(error.message);
 }
