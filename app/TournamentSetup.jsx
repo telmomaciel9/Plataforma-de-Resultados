@@ -2,7 +2,8 @@
 import React, { useState } from "react";
 import { ArrowDown, ArrowLeftRight, ArrowUp, Eye, EyeOff, Plus, Sparkles, Trash2, X } from "lucide-react";
 import {
-  FINALS, anyStarted, generateFinals, generateGroupMatches, isPlaceholder, modalityTeams, swapTeams, tournamentSettings,
+  FINALS, anyStarted, generateFinals, generateGroupMatches, generateKnockout, isKnockoutOnly, isPlaceholder, modalityTeams, swapTeams,
+  tournamentSettings,
 } from "@/lib/tournament";
 import { BracketView } from "@/app/Bracket";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/ui";
@@ -55,9 +56,12 @@ function ModalitiesSection({ draft, onEdit }) {
     : modalities.includes(trimmed) ? "Já existe."
     : trimmed.includes(":") ? "Não pode ter ':'."
     : null;
+  // Numa competição só com fase final, a modalidade nova também começa sem grupos.
+  const knockoutOnly = modalities.length > 0 && modalities.every(m => isKnockoutOnly(draft, m));
+  const newGroups = knockoutOnly ? [] : config.groups;
   const add = () => {
     if (!trimmed || problem) return;
-    onEdit({ type: "addModality", modality: trimmed, groups: config.groups });
+    onEdit({ type: "addModality", modality: trimmed, groups: newGroups });
     setName("");
   };
   const started = (m) => [...Object.values(draft.groups?.[m] ?? {}).map(g => g.matches), draft.finals?.[m] ?? []].some(anyStarted);
@@ -86,23 +90,21 @@ function ModalitiesSection({ draft, onEdit }) {
           <button onClick={add} disabled={!trimmed || !!problem} className="shrink-0 rounded-xl bg-indigo-600 px-4 text-white font-bold disabled:opacity-40" aria-label="Acrescentar modalidade"><Plus size={18} /></button>
         </div>
         {problem && <p className="text-xs font-bold text-red-600">{problem}</p>}
-        <p className="text-xs text-slate-400">Uma modalidade nova começa com os grupos {config.groups.join(", ")}.</p>
+        <p className="text-xs text-slate-400">
+          {knockoutOnly ? "Uma modalidade nova começa só com a fase final." : `Uma modalidade nova começa com os grupos ${config.groups.join(", ")}.`}
+        </p>
       </CardContent>
     </Card>
   );
 }
 
-function GroupCard({ draft, published, modality, groupKey, onEdit }) {
-  const group = draft.groups[modality][groupKey];
-  const teams = group.teams ?? [];
+/**
+ * Lista de equipas por ordem de cabeça de série: acrescentar, ordenar, mudar o nome
+ * (também nos jogos, com renameTeam) e remover. fromMatches: equipas que já aparecem
+ * nos jogos, para importar quando a lista está vazia (os grupos de 2026 não têm lista).
+ */
+function TeamListEditor({ teams, setTeams, modality, onEdit, fromMatches = [] }) {
   const [newTeam, setNewTeam] = useState("");
-  const [preview, setPreview] = useState(false);
-  const started = anyStarted(group.matches);
-  const info = generateInfo(teams, group.matches);
-  // Equipas que já aparecem nos jogos do grupo (os grupos de 2026 não têm lista própria).
-  const fromMatches = [...new Set(group.matches.flatMap(m => [m.home, m.away]))].filter(t => t?.trim() && !isPlaceholder(t));
-
-  const setTeams = (to) => onEdit({ type: "teams", modality, group: groupKey, from: teams, to });
   const move = (i, delta) => {
     const to = [...teams];
     [to[i], to[i + delta]] = [to[i + delta], to[i]];
@@ -112,17 +114,60 @@ function GroupCard({ draft, published, modality, groupKey, onEdit }) {
     const to = value.trim();
     const from = teams[i];
     if (!to || to === from) return;
-    if (teams.includes(to)) { alert(`Já existe a equipa "${to}" neste grupo.`); return; }
+    if (teams.includes(to)) { alert(`Já existe a equipa "${to}" nesta lista.`); return; }
     // Muda o nome também nos jogos já criados com esta equipa.
     onEdit({ type: "renameTeam", modality, from, to });
   };
   const addTeam = () => {
     const name = newTeam.trim();
     if (!name) return;
-    if (teams.includes(name)) { alert(`Já existe a equipa "${name}" neste grupo.`); return; }
+    if (teams.includes(name)) { alert(`Já existe a equipa "${name}" nesta lista.`); return; }
     setTeams([...teams, name]);
     setNewTeam("");
   };
+  return (
+    <>
+      <ol className="space-y-1.5">
+        {teams.map((team, i) => (
+          <li key={`${team}-${i}`} className="flex items-center gap-1.5">
+            <span className="w-5 shrink-0 text-right text-[11px] font-black text-slate-300">{i + 1}</span>
+            <input defaultValue={team} aria-label={`Equipa ${i + 1}`} onBlur={e => rename(i, e.target.value)} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="flex-1 min-w-0 rounded-lg bg-slate-50 px-2 py-1.5 text-sm font-bold outline-none ring-2 ring-transparent focus:ring-indigo-500" />
+            <button onClick={() => move(i, -1)} disabled={i === 0} aria-label="Subir" className={smallButton}><ArrowUp size={14} /></button>
+            <button onClick={() => move(i, 1)} disabled={i === teams.length - 1} aria-label="Descer" className={smallButton}><ArrowDown size={14} /></button>
+            <button onClick={() => setTeams(teams.filter((_, j) => j !== i))} aria-label={`Remover ${team}`} className={`${smallButton} hover:text-red-600`}><X size={14} /></button>
+          </li>
+        ))}
+      </ol>
+      {teams.length === 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs italic text-slate-400">Ainda sem equipas.</p>
+          {fromMatches.length > 0 && (
+            <button onClick={() => setTeams(fromMatches)} className="text-xs font-bold text-indigo-600 underline">
+              Usar as {fromMatches.length} equipas dos jogos
+            </button>
+          )}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input value={newTeam} onChange={e => setNewTeam(e.target.value)} onKeyDown={e => e.key === "Enter" && addTeam()} placeholder="Nova equipa" className={input} />
+        <button onClick={addTeam} disabled={!newTeam.trim()} className="shrink-0 rounded-xl bg-indigo-600 px-4 text-white font-bold disabled:opacity-40" aria-label="Acrescentar equipa"><Plus size={18} /></button>
+      </div>
+      <p className="text-xs text-slate-400">A ordem é a de cabeça de série: se o número de equipas não for 2, 4, 8 ou 16, as primeiras ficam isentas na 1.ª ronda.</p>
+    </>
+  );
+}
+
+const namesInMatches = (matches) =>
+  [...new Set(matches.flatMap(m => [m.home, m.away]))].filter(t => t?.trim() && !isPlaceholder(t));
+
+function GroupCard({ draft, published, modality, groupKey, onEdit }) {
+  const group = draft.groups[modality][groupKey];
+  const teams = group.teams ?? [];
+  const [preview, setPreview] = useState(false);
+  const started = anyStarted(group.matches);
+  const info = generateInfo(teams, group.matches);
+
+  const setTeams = (to) => onEdit({ type: "teams", modality, group: groupKey, from: teams, to });
   const generate = () => {
     if (group.matches.length && !confirm(`Substituir os ${group.matches.length} jogos do Grupo ${groupKey} pelo quadro gerado?`)) return;
     const from = (published.groups?.[modality]?.[groupKey]?.matches ?? []).map(m => m.id);
@@ -145,32 +190,7 @@ function GroupCard({ draft, published, modality, groupKey, onEdit }) {
         </button>
       </CardHeader>
       <CardContent className="space-y-3">
-        <ol className="space-y-1.5">
-          {teams.map((team, i) => (
-            <li key={`${team}-${i}`} className="flex items-center gap-1.5">
-              <span className="w-5 shrink-0 text-right text-[11px] font-black text-slate-300">{i + 1}</span>
-              <input defaultValue={team} aria-label={`Equipa ${i + 1}`} onBlur={e => rename(i, e.target.value)} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()} className="flex-1 min-w-0 rounded-lg bg-slate-50 px-2 py-1.5 text-sm font-bold outline-none ring-2 ring-transparent focus:ring-indigo-500" />
-              <button onClick={() => move(i, -1)} disabled={i === 0} aria-label="Subir" className={smallButton}><ArrowUp size={14} /></button>
-              <button onClick={() => move(i, 1)} disabled={i === teams.length - 1} aria-label="Descer" className={smallButton}><ArrowDown size={14} /></button>
-              <button onClick={() => setTeams(teams.filter((_, j) => j !== i))} aria-label={`Remover ${team}`} className={`${smallButton} hover:text-red-600`}><X size={14} /></button>
-            </li>
-          ))}
-        </ol>
-        {teams.length === 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xs italic text-slate-400">Ainda sem equipas.</p>
-            {fromMatches.length > 0 && (
-              <button onClick={() => setTeams(fromMatches)} className="text-xs font-bold text-indigo-600 underline">
-                Usar as {fromMatches.length} equipas dos jogos
-              </button>
-            )}
-          </div>
-        )}
-        <div className="flex gap-2">
-          <input value={newTeam} onChange={e => setNewTeam(e.target.value)} onKeyDown={e => e.key === "Enter" && addTeam()} placeholder="Nova equipa" className={input} />
-          <button onClick={addTeam} disabled={!newTeam.trim()} className="shrink-0 rounded-xl bg-indigo-600 px-4 text-white font-bold disabled:opacity-40" aria-label="Acrescentar equipa"><Plus size={18} /></button>
-        </div>
-        <p className="text-xs text-slate-400">A ordem é a de cabeça de série: se o número de equipas não for 2, 4, 8 ou 16, as primeiras ficam isentas na 1.ª ronda.</p>
+        <TeamListEditor teams={teams} setTeams={setTeams} modality={modality} onEdit={onEdit} fromMatches={namesInMatches(group.matches)} />
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <button onClick={generate} disabled={info.disabled} className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black uppercase tracking-widest text-white disabled:opacity-40">
@@ -217,7 +237,7 @@ function SwapCard({ draft, modality, onEdit }) {
       <CardHeader><CardTitle>Trocar equipas</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-slate-500">
-          Troca duas equipas de lugar em todos os jogos de {modality} ainda por começar e nas listas dos grupos, mesmo que estejam em grupos diferentes.
+          Troca duas equipas de lugar em todos os jogos de {modality} ainda por começar e nas listas de equipas, mesmo que estejam em grupos diferentes.
         </p>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           {select(a, setA, "Equipa")}
@@ -233,25 +253,43 @@ function SwapCard({ draft, modality, onEdit }) {
   );
 }
 
+/**
+ * Fase final. Com grupos: eliminatória entre os vencedores dos grupos. Sem grupos (só
+ * fase final): lista de equipas e eliminatória direta entre elas.
+ */
 function FinalsCard({ draft, published, modality, groupKeys, onEdit }) {
   const [preview, setPreview] = useState(false);
   const finals = draft.finals?.[modality] ?? [];
   const started = anyStarted(finals);
-  const disabled = started || groupKeys.length < 2;
+  const knockout = groupKeys.length === 0;
+  const teams = draft.finalsTeams?.[modality] ?? [];
+  const disabled = started || (knockout ? teams.length < 2 : groupKeys.length < 2);
+  const setTeams = (to) => onEdit({ type: "finalsTeams", modality, from: teams, to });
   const generate = () => {
     if (finals.length && !confirm(`Substituir os ${finals.length} jogos da fase final de ${modality}?`)) return;
     const from = (published.finals?.[modality] ?? []).map(m => m.id);
-    onEdit({ type: "replaceMatches", modality, group: FINALS, from, matches: generateFinals(modality, groupKeys) });
+    const matches = knockout ? generateKnockout(modality, teams) : generateFinals(modality, groupKeys);
+    onEdit({ type: "replaceMatches", modality, group: FINALS, from, matches });
     setPreview(true);
   };
   return (
     <Card>
       <CardHeader><CardTitle>Fase final</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-xs text-slate-500">
-          Gera a eliminatória entre os vencedores dos grupos ({groupKeys.join(", ") || "nenhum"}): {groupKeys[0]} contra {groupKeys[1] ?? "…"}, e assim por diante,
-          com “Vencedor do jogo X” e o 3.º/4.º lugar com “Derrotado do jogo Y”. As equipas aparecem sozinhas à medida que os grupos terminam.
-        </p>
+        {knockout ? (
+          <>
+            <p className="text-xs text-slate-500">
+              {modality} não tem grupos: a competição é só a fase final. Põe as equipas e gera a eliminatória direta,
+              com “Vencedor do jogo X” e o 3.º/4.º lugar com “Derrotado do jogo Y”.
+            </p>
+            <TeamListEditor teams={teams} setTeams={setTeams} modality={modality} onEdit={onEdit} fromMatches={namesInMatches(finals)} />
+          </>
+        ) : (
+          <p className="text-xs text-slate-500">
+            Gera a eliminatória entre os vencedores dos grupos ({groupKeys.join(", ")}): {groupKeys[0]} contra {groupKeys[1] ?? "…"}, e assim por diante,
+            com “Vencedor do jogo X” e o 3.º/4.º lugar com “Derrotado do jogo Y”. As equipas aparecem sozinhas à medida que os grupos terminam.
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={generate} disabled={disabled} className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black uppercase tracking-widest text-white disabled:opacity-40">
             <Sparkles size={14} /> {finals.length ? "Gerar de novo" : "Gerar fase final"}
@@ -262,7 +300,8 @@ function FinalsCard({ draft, published, modality, groupKeys, onEdit }) {
             </button>
           )}
           {started && <span className="text-xs font-bold text-slate-400">Já há jogos da fase final começados.</span>}
-          {groupKeys.length < 2 && <span className="text-xs font-bold text-slate-400">Precisa de pelo menos 2 grupos.</span>}
+          {!knockout && groupKeys.length < 2 && <span className="text-xs font-bold text-slate-400">Precisa de pelo menos 2 grupos.</span>}
+          {knockout && !started && <span className="text-xs font-bold text-slate-400">{teams.length < 2 ? "Precisa de pelo menos 2 equipas." : `${teams.length} equipas.`}</span>}
         </div>
         {preview && finals.length > 0 && <BracketView state={draft} modality={modality} group={FINALS} />}
       </CardContent>
@@ -289,10 +328,12 @@ export function TournamentSetup({ draft, published, modality, onEdit }) {
       {draft.modalities?.includes(modality) && (
         <>
           <div className="flex items-center justify-between pt-2">
-            <h2 className="text-sm font-black uppercase tracking-widest text-slate-700">Grupos de {modality}</h2>
+            <h2 className="text-sm font-black uppercase tracking-widest text-slate-700">
+              {groupKeys.length ? `Grupos de ${modality}` : `${modality}: só fase final`}
+            </h2>
             {nextLetter && (
               <button onClick={() => onEdit({ type: "addGroup", modality, group: nextLetter })} className="flex items-center gap-1 text-xs font-bold text-indigo-600">
-                <Plus size={14} /> Grupo {nextLetter}
+                <Plus size={14} /> {groupKeys.length ? `Grupo ${nextLetter}` : "Usar grupos"}
               </button>
             )}
           </div>

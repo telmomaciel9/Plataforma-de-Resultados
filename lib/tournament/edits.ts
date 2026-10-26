@@ -20,6 +20,8 @@ export type Edit =
   | { type: "settings"; field: keyof TournamentSettings; from: string; to: string }
   /** Lista de equipas de um grupo, pela ordem de cabeça de série. */
   | { type: "teams"; modality: string; group: string; from: string[]; to: string[] }
+  /** Equipas da fase final de uma modalidade sem grupos, pela ordem de cabeça de série. */
+  | { type: "finalsTeams"; modality: string; from: string[]; to: string[] }
   /** Muda o nome de uma equipa nos grupos e em todos os jogos da modalidade. */
   | { type: "renameTeam"; modality: string; from: string; to: string }
   /**
@@ -130,6 +132,13 @@ export function addEdit(edits: Edit[], edit: Edit): Edit[] {
     return same(from, edit.to) ? rest : [...rest, { ...edit, from }];
   }
 
+  if (edit.type === "finalsTeams") {
+    const previous = edits.find((e) => e.type === "finalsTeams" && e.modality === edit.modality);
+    const from = previous && previous.type === "finalsTeams" ? previous.from : edit.from;
+    const rest = edits.filter((e) => e !== previous);
+    return same(from, edit.to) ? rest : [...rest, { ...edit, from }];
+  }
+
   if (edit.type === "replaceMatches") {
     const previous = edits.find((e) => e.type === "replaceMatches" && groupKey(e) === groupKey(edit));
     const from = previous && previous.type === "replaceMatches" ? previous.from : edit.from;
@@ -222,6 +231,16 @@ export function applyEdits(state: TournamentState, edits: Edit[]): { state: Tour
         break;
       }
 
+      case "finalsTeams": {
+        next.finalsTeams ??= {};
+        const current = next.finalsTeams[edit.modality] ?? [];
+        if (!same(current, edit.from) && !same(current, edit.to)) {
+          conflicts.push({ edit, reason: "changed", current: current.join(", ") });
+        }
+        next.finalsTeams[edit.modality] = [...edit.to];
+        break;
+      }
+
       case "renameTeam": {
         let found = false;
         for (const g of Object.values(next.groups[edit.modality] ?? {})) {
@@ -229,6 +248,11 @@ export function applyEdits(state: TournamentState, edits: Edit[]): { state: Tour
             g.teams = g.teams.map((t) => (t === edit.from ? edit.to : t));
             found = true;
           }
+        }
+        const finalsTeams = next.finalsTeams?.[edit.modality];
+        if (finalsTeams?.includes(edit.from)) {
+          next.finalsTeams![edit.modality] = finalsTeams.map((t) => (t === edit.from ? edit.to : t));
+          found = true;
         }
         for (const list of modalityLists(next, edit.modality)) {
           for (const m of list) {
@@ -293,6 +317,7 @@ export function applyEdits(state: TournamentState, edits: Edit[]): { state: Tour
         next.modalities = next.modalities.filter((m) => m !== edit.modality);
         delete next.groups[edit.modality];
         delete next.finals[edit.modality];
+        if (next.finalsTeams) delete next.finalsTeams[edit.modality];
         break;
       }
     }
@@ -312,6 +337,8 @@ function describeTarget(edit: Edit): string {
       return `o campo "${edit.field}" do torneio`;
     case "teams":
       return `as equipas do Grupo ${edit.group} (${edit.modality})`;
+    case "finalsTeams":
+      return `as equipas da fase final (${edit.modality})`;
     case "renameTeam":
       return `a equipa "${edit.from}" (${edit.modality})`;
     case "replaceMatches":

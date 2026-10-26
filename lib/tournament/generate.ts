@@ -116,6 +116,23 @@ export function generateFinals(modality: string, groups: string[]): Match[] {
     else positions.push(winners[w++], winners[w++]);
   }
 
+  return finalsKnockout(modality, positions);
+}
+
+/**
+ * Fase final sem grupos: eliminatória direta entre as equipas, por ordem de cabeça de
+ * série (como nos grupos, as primeiras ficam isentas da 1.ª ronda se for preciso).
+ * Mesmos nomes e ids que a fase final a partir de grupos, com 3.º/4.º lugar.
+ */
+export function generateKnockout(modality: string, teams: string[]): Match[] {
+  const names = teams.map((t) => t.trim()).filter(Boolean);
+  if (names.length < 2) return [];
+  const size = nextPowerOfTwo(names.length);
+  return finalsKnockout(modality, seedOrder(size).map((seed) => names[seed - 1] ?? null));
+}
+
+/** Eliminatória com os nomes da fase final (Quartos, Meia-final, Final) e o jogo do 3.º/4.º lugar. */
+function finalsKnockout(modality: string, positions: (Slot | null)[]): Match[] {
   const p = matchIdPrefix(modality);
   const names = ["FINAL", "MF", "QF", "OF"];
   const labels = ["Final", "Meia-final", "Quartos de final", "Oitavos de final"];

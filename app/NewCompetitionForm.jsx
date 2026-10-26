@@ -15,11 +15,12 @@ export function NewCompetitionForm({ onCreate, onCancel }) {
   const [name, setName] = useState("");
   const [edition, setEdition] = useState("");
   const [modalities, setModalities] = useState(config.modalities.join(", "));
+  const [format, setFormat] = useState("groups");
   const [groupCount, setGroupCount] = useState(config.groups.length);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const fields = { name, edition, modalities: modalities.split(","), groupCount: Number(groupCount) };
+  const fields = { name, edition, modalities: modalities.split(","), format, groupCount: Number(groupCount) };
   const problems = validateNewCompetition(fields);
   const id = competitionId(name, edition);
 
@@ -54,11 +55,20 @@ export function NewCompetitionForm({ onCreate, onCancel }) {
             <input value={modalities} onChange={e => setModalities(e.target.value)} className={`${input} mt-1`} />
           </label>
           <label className="block">
-            <span className={label}>Grupos por modalidade</span>
-            <select value={groupCount} onChange={e => setGroupCount(e.target.value)} className={`${input} mt-1`}>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map(n => <option key={n} value={n}>{n} {n === 1 ? "grupo" : "grupos"}</option>)}
+            <span className={label}>Formato</span>
+            <select value={format} onChange={e => setFormat(e.target.value)} className={`${input} mt-1`}>
+              <option value="groups">Grupos e depois fase final</option>
+              <option value="knockout">Só fase final (eliminatória direta)</option>
             </select>
           </label>
+          {format === "groups" && (
+            <label className="block">
+              <span className={label}>Grupos por modalidade</span>
+              <select value={groupCount} onChange={e => setGroupCount(e.target.value)} className={`${input} mt-1`}>
+                {[1, 2, 3, 4, 5, 6, 7, 8].map(n => <option key={n} value={n}>{n} {n === 1 ? "grupo" : "grupos"}</option>)}
+              </select>
+            </label>
+          )}
           {id && <p className="text-xs text-slate-500">Endereço: <span className="font-bold text-slate-700">/c/{id}</span></p>}
           {name.trim() && problems.length > 0 && (
             <ul className="text-xs font-bold text-red-600 space-y-1">{problems.map(p => <li key={p}>{p}</li>)}</ul>

@@ -2,12 +2,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, LogOut, Plus, Trophy } from "lucide-react";
+import { ChevronRight, Plus, Trophy } from "lucide-react";
 import { competitionSummary } from "@/lib/tournament";
-import { createCompetition, listCompetitions, supabase } from "@/lib/appState";
+import { createCompetition, listCompetitions } from "@/lib/appState";
 import { useAdminUser } from "@/lib/useTournament";
 import { Header } from "@/app/ui";
-import { AdminLogin } from "@/app/AdminLogin";
+import { AdminButton } from "@/app/AdminLogin";
 import { NewCompetitionForm } from "@/app/NewCompetitionForm";
 import config from "@/tournament.config.json";
 
@@ -20,7 +20,6 @@ export default function CompetitionsMenu() {
   const [competitions, setCompetitions] = useState(null);
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
-  const [showLogin, setShowLogin] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -49,11 +48,7 @@ export default function CompetitionsMenu() {
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans text-slate-900">
       <Header title="Competições" settings={platform}>
-        {user && (
-          <button onClick={() => supabase.auth.signOut()} aria-label="Terminar sessão" className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all">
-            <LogOut size={18} />
-          </button>
-        )}
+        <AdminButton user={user} />
       </Header>
 
       <div className="px-4 space-y-4 max-w-md mx-auto">
@@ -79,23 +74,18 @@ export default function CompetitionsMenu() {
           </Link>
         ))}
 
-        <div className="pt-4">
-          {user ? (
-            creating
+        {/* Ferramentas da organização: só com sessão iniciada (botão no canto do cabeçalho). */}
+        {user && (
+          <div className="pt-4">
+            {creating
               ? <NewCompetitionForm onCreate={create} onCancel={() => setCreating(false)} />
               : (
                 <button onClick={() => setCreating(true)} className="w-full bg-white border-2 border-dashed border-slate-200 p-4 rounded-2xl flex items-center justify-center gap-2 text-slate-500 font-bold text-sm hover:border-indigo-300 hover:text-indigo-500 transition-all">
                   <Plus size={18} /> Nova competição
                 </button>
-              )
-          ) : showLogin ? (
-            <AdminLogin />
-          ) : (
-            <button onClick={() => setShowLogin(true)} className="w-full text-center text-xs font-bold text-slate-400 hover:text-indigo-600">
-              És da organização? Entrar para criar competições
-            </button>
-          )}
-        </div>
+              )}
+          </div>
+        )}
       </div>
     </div>
   );

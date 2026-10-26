@@ -53,6 +53,13 @@ export default function TeamPage({ params }) {
   const record = { win: 0, loss: 0, draw: 0 };
   played.forEach(m => { record[m.outcome] += 1; });
   const others = matches.filter(m => m !== next);
+  const byModality = team.modalities
+    .map(modality => {
+      const all = matches.filter(m => m.modality === modality);
+      const count = (outcome) => all.filter(m => m.outcome === outcome).length;
+      return { modality, list: others.filter(m => m.modality === modality), wins: count("win"), draws: count("draw"), losses: count("loss") };
+    })
+    .filter(({ list }) => list.length > 0);
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans text-slate-900">
@@ -109,23 +116,30 @@ export default function TeamPage({ params }) {
           </Card>
         )}
 
-        <Card>
-          <CardHeader><CardTitle>Todos os jogos</CardTitle></CardHeader>
-          <CardContent className="divide-y divide-slate-50">
-            {others.length > 0 ? others.map(m => (
-              <div key={m.match.id} className="flex items-start gap-3 py-5 first:pt-0 last:pb-0">
-                <div className="flex-1 min-w-0">
-                  <MatchRow match={m.match} highlight={team.name} teamHref={teamHref} subtitle={m.modality} className="" />
+        {/* Os restantes jogos, um cartão por modalidade, com o balanço dessa modalidade. */}
+        {byModality.map(({ modality, list, wins, draws, losses }) => (
+          <Card key={modality}>
+            <CardHeader>
+              <CardTitle>{modality}</CardTitle>
+              <span className="text-[11px] font-black text-slate-400">{wins}V · {draws}E · {losses}D</span>
+            </CardHeader>
+            <CardContent className="divide-y divide-slate-50">
+              {list.map(m => (
+                <div key={m.match.id} className="flex items-start gap-3 py-5 first:pt-0 last:pb-0">
+                  <div className="flex-1 min-w-0">
+                    <MatchRow match={m.match} highlight={team.name} teamHref={teamHref} className="" />
+                  </div>
+                  {m.outcome && (
+                    <span title={OUTCOME[m.outcome].title} className={`mt-7 shrink-0 w-6 h-6 rounded-full text-[11px] font-black flex items-center justify-center ${OUTCOME[m.outcome].className}`}>
+                      {OUTCOME[m.outcome].label}
+                    </span>
+                  )}
                 </div>
-                {m.outcome && (
-                  <span title={OUTCOME[m.outcome].title} className={`mt-7 shrink-0 w-6 h-6 rounded-full text-[11px] font-black flex items-center justify-center ${OUTCOME[m.outcome].className}`}>
-                    {OUTCOME[m.outcome].label}
-                  </span>
-                )}
-              </div>
-            )) : <div className="text-center py-6 text-slate-400 text-sm italic font-medium">Sem mais jogos.</div>}
-          </CardContent>
-        </Card>
+              ))}
+            </CardContent>
+          </Card>
+        ))}
+        {matches.length === 0 && <div className="text-center py-6 text-slate-400 text-sm italic font-medium">Ainda sem jogos.</div>}
 
         {next?.status === "live" && (
           <p className="text-center text-xs font-bold text-slate-400">

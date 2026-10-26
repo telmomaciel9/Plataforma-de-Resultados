@@ -74,6 +74,7 @@ export function slotOptions(state: TournamentState, modality: string, matchId: s
 
   const teamNames = new Set<string>();
   Object.values(state.groups?.[modality] ?? {}).forEach((g) => g.teams?.forEach((t) => teamNames.add(t)));
+  state.finalsTeams?.[modality]?.forEach((t) => teamNames.add(t));
   located.forEach(({ match }) =>
     [match.home, match.away].forEach((side) => {
       if (side?.trim() && !isPlaceholder(side) && side !== TO_BE_DECIDED) teamNames.add(side);

@@ -18,12 +18,14 @@ export interface NewCompetition {
   name: string;
   edition: string;
   modalities: string[];
-  /** Número de grupos por modalidade (1 a 8: A, B, C...). */
+  /** "groups": grupos e depois fase final (por omissão); "knockout": só fase final, eliminatória direta. */
+  format?: "groups" | "knockout";
+  /** Número de grupos por modalidade (1 a 8: A, B, C...). Ignorado em "knockout". */
   groupCount: number;
 }
 
 /** Problemas no formulário de nova competição (vazio se estiver tudo bem). */
-export function validateNewCompetition({ name, edition, modalities, groupCount }: NewCompetition): string[] {
+export function validateNewCompetition({ name, edition, modalities, format = "groups", groupCount }: NewCompetition): string[] {
   const problems: string[] = [];
   const mods = modalities.map((m) => m.trim()).filter(Boolean);
   if (!name.trim()) problems.push("Indica o nome da competição.");
@@ -31,15 +33,16 @@ export function validateNewCompetition({ name, edition, modalities, groupCount }
   if (!mods.length) problems.push("Indica pelo menos uma modalidade.");
   if (new Set(mods).size !== mods.length) problems.push("Há modalidades repetidas.");
   if (mods.some((m) => m.includes(":"))) problems.push("As modalidades não podem ter ':'.");
-  if (!Number.isInteger(groupCount) || groupCount < 1 || groupCount > LETTERS.length) {
+  if (format === "groups" && (!Number.isInteger(groupCount) || groupCount < 1 || groupCount > LETTERS.length)) {
     problems.push(`O número de grupos tem de ser entre 1 e ${LETTERS.length}.`);
   }
   return problems;
 }
 
 /**
- * Competição nova: grupos vazios em cada modalidade e a fase final já ligada aos
- * vencedores dos grupos. As equipas e os jogos dos grupos configuram-se depois no admin.
+ * Competição nova. Com grupos: grupos vazios em cada modalidade e a fase final já
+ * ligada aos vencedores dos grupos. Só fase final: sem grupos, com uma lista de equipas
+ * da fase final por modalidade. As equipas e os jogos configuram-se depois no admin.
  */
 export function newCompetition(input: NewCompetition): { id: string; state: TournamentState } {
   const problems = validateNewCompetition(input);
@@ -47,7 +50,8 @@ export function newCompetition(input: NewCompetition): { id: string; state: Tour
   const name = input.name.trim();
   const edition = input.edition.trim();
   const modalities = input.modalities.map((m) => m.trim()).filter(Boolean);
-  const groups = LETTERS.slice(0, input.groupCount);
+  const knockout = input.format === "knockout";
+  const groups = knockout ? [] : LETTERS.slice(0, input.groupCount);
   const settings: TournamentSettings = { name, edition, title: [name, edition].filter(Boolean).join(" ") };
   return {
     id: competitionId(name, edition),
@@ -56,8 +60,14 @@ export function newCompetition(input: NewCompetition): { id: string; state: Tour
       modalities,
       groups: Object.fromEntries(modalities.map((m) => [m, Object.fromEntries(groups.map((g) => [g, { teams: [], matches: [] }]))])),
       finals: Object.fromEntries(modalities.map((m) => [m, generateFinals(m, groups)])),
+      ...(knockout ? { finalsTeams: Object.fromEntries(modalities.map((m) => [m, []])) } : {}),
     },
   };
+}
+
+/** true se a modalidade não tem grupos: a competição é só fase final (eliminatória direta). */
+export function isKnockoutOnly(state: TournamentState, modality: string): boolean {
+  return Object.keys(state.groups?.[modality] ?? {}).length === 0;
 }
 
 export interface CompetitionSummary {

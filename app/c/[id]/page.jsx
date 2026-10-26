@@ -2,18 +2,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft, ChevronRight, LogOut, Plus, Save, Trash2, Edit3, Users
+  ArrowLeft, ChevronRight, Plus, Save, Trash2, Edit3, Users
 } from "lucide-react";
 import {
   addEdit, allTeams, applyEdits, conflictMessage, isPlaceholder, tournamentSettings, matchStatus, matchTeams, needsTiebreak, nextMatch, publishEdits, resolveTournament,
   slotOptions, teamMatches, teamSlug,
 } from "@/lib/tournament";
-import { competitionStore, supabase } from "@/lib/appState";
+import { competitionStore } from "@/lib/appState";
 import { getMyTeam, setMyTeam, useAdminUser, useTournament } from "@/lib/useTournament";
 import {
   Card, CardContent, CardHeader, CardTitle, Header, LiveBadge, LiveIndicator, LoadingOrError, MatchRow, STATUS_LABELS, scoreText,
 } from "@/app/ui";
-import { AdminLogin } from "@/app/AdminLogin";
+import { AdminButton } from "@/app/AdminLogin";
 import { BracketView } from "@/app/Bracket";
 import { TournamentSetup } from "@/app/TournamentSetup";
 import config from "@/tournament.config.json";
@@ -209,17 +209,19 @@ export default function CompetitionPage({ params }) {
   const onEdit = (edit) => setEdits((list) => addEdit(list, edit));
 
   // No admin mostra-se o rascunho (com modalidades e grupos acabados de criar); no público, o publicado.
-  const shown = tab === "admin" && user ? draft : published;
+  // A área de admin só existe com sessão iniciada; sem sessão vê-se sempre a página pública.
+  const adminMode = tab === "admin" && !!user;
+  const shown = adminMode ? draft : published;
   const modalities = shown?.modalities?.length ? shown.modalities : config.modalities;
-  const groupKeys = Object.keys(shown?.groups?.[modality] ?? {});
-  const groups = groupKeys.length ? groupKeys : config.groups;
+  // Sem grupos (competição só com fase final) mostra-se logo a fase final.
+  const groups = Object.keys(shown?.groups?.[modality] ?? {});
   const settings = tournamentSettings(published, config);
 
   // Se a modalidade ou o grupo escolhidos deixarem de existir (removidos ou endereço antigo), passa ao primeiro.
   useEffect(() => {
     if (!shown) return;
     if (!modalities.includes(modality)) setModality(modalities[0]);
-    else if (group !== "Finais" && !groups.includes(group)) setGroup(groups[0]);
+    else if (group !== "Finais" && !groups.includes(group)) setGroup(groups[0] ?? "Finais");
   }, [shown, modalities, groups, modality, group]);
 
   useEffect(() => {
@@ -264,35 +266,35 @@ export default function CompetitionPage({ params }) {
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans text-slate-900">
       <Header title="Resultados" settings={settings}>
-        {user && (
-          <button onClick={() => supabase.auth.signOut()} aria-label="Terminar sessão" className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all">
-            <LogOut size={18} />
-          </button>
-        )}
+        <AdminButton user={user} />
       </Header>
 
-      <div className={`px-4 space-y-6 max-w-md mx-auto ${tab === "public" && view === "bracket" ? "md:max-w-4xl" : ""}`}>
+      <div className={`px-4 space-y-6 max-w-md mx-auto ${!adminMode && view === "bracket" ? "md:max-w-4xl" : ""}`}>
         <Link href="/" className="-mt-2 flex items-center gap-1 text-sm font-bold text-indigo-600"><ArrowLeft size={16} /> Competições</Link>
-        {tab === "public" && teams.length > 0 && <MyTeamCard competition={competition} state={published} teams={teams} />}
+        {!adminMode && teams.length > 0 && <MyTeamCard competition={competition} state={published} teams={teams} />}
 
-        {/* TAB SWITCHER */}
-        <div className="flex bg-slate-200/50 p-1.5 rounded-2xl">
-          <button onClick={() => setTab("public")} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${tab === "public" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}>PÚBLICO</button>
-          <button onClick={() => setTab("admin")} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${tab === "admin" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}>ADMIN</button>
-        </div>
+        {/* PÚBLICO / ADMIN: só para quem tem sessão iniciada */}
+        {user && (
+          <div className="flex bg-slate-200/50 p-1.5 rounded-2xl">
+            <button onClick={() => setTab("public")} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${!adminMode ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}>PÚBLICO</button>
+            <button onClick={() => setTab("admin")} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${adminMode ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}>ADMIN</button>
+          </div>
+        )}
 
         {/* SELETORES DE FILTRO */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`grid gap-3 ${groups.length ? "grid-cols-2" : "grid-cols-1"}`}>
           <select value={modality} onChange={(e) => setModality(e.target.value)} className="bg-white p-4 rounded-2xl shadow-sm font-bold text-sm outline-none border-none ring-2 ring-transparent focus:ring-indigo-500 transition-all">
             {modalities.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          <select value={group} onChange={(e) => changeGroup(e.target.value)} className="bg-white p-4 rounded-2xl shadow-sm font-bold text-sm outline-none border-none ring-2 ring-transparent focus:ring-indigo-500 transition-all">
-            {groups.map(g => <option key={g} value={g}>Grupo {g}</option>)}
-            <option value="Finais" className="text-indigo-600 font-bold">🏆 FINAIS</option>
-          </select>
+          {groups.length > 0 && (
+            <select value={group} onChange={(e) => changeGroup(e.target.value)} className="bg-white p-4 rounded-2xl shadow-sm font-bold text-sm outline-none border-none ring-2 ring-transparent focus:ring-indigo-500 transition-all">
+              {groups.map(g => <option key={g} value={g}>Grupo {g}</option>)}
+              <option value="Finais" className="text-indigo-600 font-bold">🏆 FINAIS</option>
+            </select>
+          )}
         </div>
 
-        {tab === "public" ? (
+        {!adminMode ? (
           <Card>
             <CardHeader className="flex-wrap gap-2">
                 <CardTitle>{modality} — {group === "Finais" ? "Fase Final" : `Grupo ${group}`}</CardTitle>
@@ -318,10 +320,7 @@ export default function CompetitionPage({ params }) {
           </Card>
         ) : (
           <div className="space-y-4">
-            {!user ? (
-              <AdminLogin />
-            ) : (
-              <>
+            <>
                 <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-200/50 p-1" role="group" aria-label="Área do admin">
                   {[["matches", "Jogos"], ["setup", "Torneio e equipas"]].map(([key, label]) => (
                     <button key={key} onClick={() => setAdminView(key)} aria-pressed={adminView === key} className={`rounded-lg py-2 text-[11px] font-black uppercase tracking-widest ${adminView === key ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}>
@@ -402,8 +401,7 @@ export default function CompetitionPage({ params }) {
                     </Card>
                   ))}
                 </div>
-              </>
-            )}
+            </>
           </div>
         )}
       </div>
