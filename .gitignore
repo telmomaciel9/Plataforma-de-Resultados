@@ -5,3 +5,4 @@ out/
 .vercel
 .DS_Store
 *.tsbuildinfo
+supabase/novo-torneio.sql
