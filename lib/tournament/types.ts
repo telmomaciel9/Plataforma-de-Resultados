@@ -36,7 +36,17 @@ export interface Group {
   finalMatchId?: string;
 }
 
+/** Textos do torneio editáveis no admin; os que faltam vêm de tournament.config.json. */
+export interface TournamentSettings {
+  name?: string;
+  /** Edição mostrada a seguir ao nome, por exemplo "'27". */
+  edition?: string;
+  /** Título da página no browser. */
+  title?: string;
+}
+
 export interface TournamentState {
+  settings?: TournamentSettings;
   modalities: string[];
   groups: Record<string, Record<string, Group>>;
   finals: Record<string, Match[]>;

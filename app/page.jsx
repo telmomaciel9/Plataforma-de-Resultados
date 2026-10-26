@@ -5,13 +5,14 @@ import {
   ChevronRight, Lock, LogOut, Plus, Save, Trash2, Edit3, Users
 } from "lucide-react";
 import {
-  addEdit, allTeams, applyEdits, isPlaceholder, matchStatus, matchTeams, needsTiebreak, nextMatch, publishEdits, resolveTournament,
+  addEdit, allTeams, applyEdits, conflictMessage, isPlaceholder, tournamentSettings, matchStatus, matchTeams, needsTiebreak, nextMatch, publishEdits, resolveTournament,
   slotOptions, teamMatches, teamSlug,
 } from "@/lib/tournament";
 import { appStateStore, supabase } from "@/lib/appState";
 import { getMyTeam, setMyTeam, useTournament } from "@/lib/useTournament";
 import { Card, CardContent, CardHeader, CardTitle, Header, LiveBadge, LiveIndicator, LoadingOrError, MatchRow, STATUS_LABELS, scoreText } from "@/app/ui";
 import { BracketView } from "@/app/Bracket";
+import { TournamentSetup } from "@/app/TournamentSetup";
 import config from "@/tournament.config.json";
 
 const defaultStage = (group) => (group === "Finais" ? "Final" : "Ronda 1");
@@ -132,11 +133,6 @@ function MyTeamCard({ state, teams }) {
   );
 }
 
-function describeConflict({ edit, reason, current }) {
-  if (reason === "missing") return `Um jogo que alteraste já tinha sido apagado por outro admin (${edit.matchId}).`;
-  return `${edit.matchId}: outro admin tinha mudado "${current}"; ficou o teu valor "${edit.to}".`;
-}
-
 export default function Page() {
   // published = o que está no Supabase (separador Público), atualizado em tempo real.
   // edits = alterações do admin por publicar; o rascunho é published + edits, por isso
@@ -147,6 +143,7 @@ export default function Page() {
   const [user, setUser] = useState(null);
   const [tab, setTab] = useState("public");
   const [view, setView] = useState("list");
+  const [adminView, setAdminView] = useState("matches");
   const [modality, setModality] = useState(config.modalities[0]);
   const [group, setGroup] = useState(config.groups[0]);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -162,7 +159,7 @@ export default function Page() {
   // ?vista=quadro&modalidade=Voleibol&grupo=Finais.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (config.modalities.includes(params.get("modalidade"))) setModality(params.get("modalidade"));
+    if (params.get("modalidade")) setModality(params.get("modalidade"));
     if (params.get("grupo")) setGroup(params.get("grupo"));
     if (params.get("vista") === "quadro") setView("bracket");
   }, []);
@@ -198,7 +195,7 @@ export default function Page() {
       setPublished(result.state);
       setEdits([]);
       alert(result.conflicts.length
-        ? "Publicado, mas com avisos:\n\n" + result.conflicts.map(describeConflict).join("\n")
+        ? "Publicado, mas com avisos:\n\n" + result.conflicts.map(conflictMessage).join("\n")
         : "Alterações publicadas com sucesso!");
     } catch (error) {
       alert("Erro ao guardar: " + error.message);
@@ -217,6 +214,25 @@ export default function Page() {
   };
 
   const draft = useMemo(() => (published ? applyEdits(published, edits).state : null), [published, edits]);
+  const onEdit = (edit) => setEdits((list) => addEdit(list, edit));
+
+  // No admin mostra-se o rascunho (com modalidades e grupos acabados de criar); no público, o publicado.
+  const shown = tab === "admin" && user ? draft : published;
+  const modalities = shown?.modalities?.length ? shown.modalities : config.modalities;
+  const groupKeys = Object.keys(shown?.groups?.[modality] ?? {});
+  const groups = groupKeys.length ? groupKeys : config.groups;
+  const settings = tournamentSettings(published, config);
+
+  // Se a modalidade ou o grupo escolhidos deixarem de existir (removidos ou endereço antigo), passa ao primeiro.
+  useEffect(() => {
+    if (!shown) return;
+    if (!modalities.includes(modality)) setModality(modalities[0]);
+    else if (group !== "Finais" && !groups.includes(group)) setGroup(groups[0]);
+  }, [shown, modalities, groups, modality, group]);
+
+  useEffect(() => {
+    document.title = settings.title;
+  }, [settings.title]);
 
   const updateMatch = (match, field, value) =>
     setEdits((list) => addEdit(list, { type: "update", matchId: match.id, field, from: match[field] ?? "", to: value }));
@@ -250,15 +266,12 @@ export default function Page() {
 
   if (!published) return <LoadingOrError loadError={loadError} onRetry={fetchData} />;
 
-  const modalities = published.modalities || config.modalities;
-  // Grupos da configuração, mais algum que exista nos dados e não esteja na configuração.
-  const groups = [...new Set([...config.groups, ...Object.keys(published.groups?.[modality] || {})])];
   const publicMatches = matchesOf(resolved, modality, group);
   const draftMatches = matchesOf(draft, modality, group);
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans text-slate-900">
-      <Header title="Resultados">
+      <Header title="Resultados" settings={settings}>
         {user && (
           <button onClick={() => supabase.auth.signOut()} aria-label="Terminar sessão" className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all">
             <LogOut size={18} />
@@ -324,11 +337,20 @@ export default function Page() {
               </Card>
             ) : (
               <>
+                <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-200/50 p-1" role="group" aria-label="Área do admin">
+                  {[["matches", "Jogos"], ["setup", "Torneio e equipas"]].map(([key, label]) => (
+                    <button key={key} onClick={() => setAdminView(key)} aria-pressed={adminView === key} className={`rounded-lg py-2 text-[11px] font-black uppercase tracking-widest ${adminView === key ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setShowAddModal(true)} className="flex-[2] bg-white border-2 border-dashed border-slate-200 p-4 rounded-2xl flex items-center justify-center gap-2 text-slate-500 font-bold text-sm hover:border-indigo-300 hover:text-indigo-500 transition-all">
-                    <Plus size={18} /> Novo Jogo ({group})
-                  </button>
-                  <button onClick={saveAll} disabled={saving || !dirty} className="flex-1 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50">
+                  {adminView === "matches" && (
+                    <button onClick={() => setShowAddModal(true)} className="flex-[2] bg-white border-2 border-dashed border-slate-200 p-4 rounded-2xl flex items-center justify-center gap-2 text-slate-500 font-bold text-sm hover:border-indigo-300 hover:text-indigo-500 transition-all">
+                      <Plus size={18} /> Novo Jogo ({group})
+                    </button>
+                  )}
+                  <button onClick={saveAll} disabled={saving || !dirty} className="flex-1 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 py-4">
                     <Save size={18} /> {saving ? "..." : "PUBLICAR"}
                   </button>
                 </div>
@@ -339,7 +361,9 @@ export default function Page() {
                   </p>
                 )}
 
-                <div className="space-y-3">
+                {adminView === "setup" && <TournamentSetup draft={draft} published={published} modality={modality} onEdit={onEdit} />}
+
+                <div className={`space-y-3 ${adminView === "matches" ? "" : "hidden"}`}>
                   {draftMatches.map(m => (
                     <Card key={m.id} className="p-4 bg-white relative border-l-4 border-l-indigo-500">
                       <button onClick={() => deleteMatch(m.id)} aria-label="Apagar jogo" className="absolute top-3 right-3 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
