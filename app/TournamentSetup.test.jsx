@@ -121,6 +121,24 @@ describe("TournamentSetup", () => {
     expect(screen.getByText("Já existe.")).toBeTruthy();
   });
 
+  it("troca duas equipas depois de gerar o quadro", () => {
+    const state = published();
+    state.groups.Voleibol.B.teams = ["Alfa", "Beta", "Gama", "Delta"];
+    render(<Harness published={state} />);
+    fireEvent.click(within(groupCard("B")).getByRole("button", { name: /gerar jogos/i }));
+
+    const swap = within(screen.getByText("Trocar equipas", { selector: "h3" }).closest("div.rounded-2xl"));
+    fireEvent.change(swap.getByLabelText("Equipa"), { target: { value: "Alfa" } });
+    fireEvent.change(swap.getByLabelText("Trocar com"), { target: { value: "Gama" } });
+    fireEvent.click(swap.getByRole("button", { name: /trocar/i }));
+    expect(swap.getByRole("status").textContent).toBe("Trocadas em 2 jogos.");
+
+    // A troca ficou dentro do quadro gerado (ainda por publicar) e na lista do grupo.
+    const replace = lastEdits.find((e) => e.type === "replaceMatches");
+    expect(replace.matches.slice(0, 2).map((m) => [m.home, m.away])).toEqual([["Gama", "Delta"], ["Beta", "Alfa"]]);
+    expect(lastEdits.find((e) => e.type === "teams").to).toEqual(["Gama", "Beta", "Alfa", "Delta"]);
+  });
+
   it("muda o nome do torneio", () => {
     render(<Harness published={published()} />);
     fireEvent.change(screen.getByPlaceholderText("Gata na Praia"), { target: { value: "Taça AAUM" } });

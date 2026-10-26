@@ -1,7 +1,9 @@
 "use client";
 import React, { useState } from "react";
-import { ArrowDown, ArrowUp, Eye, EyeOff, Plus, Sparkles, Trash2, X } from "lucide-react";
-import { FINALS, anyStarted, generateFinals, generateGroupMatches, isPlaceholder, tournamentSettings } from "@/lib/tournament";
+import { ArrowDown, ArrowLeftRight, ArrowUp, Eye, EyeOff, Plus, Sparkles, Trash2, X } from "lucide-react";
+import {
+  FINALS, anyStarted, generateFinals, generateGroupMatches, isPlaceholder, modalityTeams, swapTeams, tournamentSettings,
+} from "@/lib/tournament";
 import { BracketView } from "@/app/Bracket";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/ui";
 import config from "@/tournament.config.json";
@@ -187,6 +189,50 @@ function GroupCard({ draft, published, modality, groupKey, onEdit }) {
   );
 }
 
+/** Troca duas equipas de lugar nos jogos por começar (por exemplo, depois de gerar o quadro). */
+function SwapCard({ draft, modality, onEdit }) {
+  const [a, setA] = useState("");
+  const [b, setB] = useState("");
+  const [message, setMessage] = useState(null);
+  const teams = modalityTeams(draft, modality);
+  const swap = () => {
+    const result = swapTeams(draft, modality, a, b);
+    result.edits.forEach(onEdit);
+    setMessage(
+      `Trocadas em ${result.changedMatches} ${result.changedMatches === 1 ? "jogo" : "jogos"}` +
+      (result.skippedMatches ? `; ${result.skippedMatches} já começados ficaram como estavam.` : "."),
+    );
+    setA("");
+    setB("");
+  };
+  if (teams.length < 2) return null;
+  const select = (value, set, label) => (
+    <select value={value} onChange={e => { set(e.target.value); setMessage(null); }} aria-label={label} className={`${input} truncate`}>
+      <option value="">{label}…</option>
+      {teams.map(t => <option key={t} value={t}>{t}</option>)}
+    </select>
+  );
+  return (
+    <Card>
+      <CardHeader><CardTitle>Trocar equipas</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-xs text-slate-500">
+          Troca duas equipas de lugar em todos os jogos de {modality} ainda por começar e nas listas dos grupos, mesmo que estejam em grupos diferentes.
+        </p>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          {select(a, setA, "Equipa")}
+          <ArrowLeftRight size={16} className="text-slate-400" />
+          {select(b, setB, "Trocar com")}
+        </div>
+        <button onClick={swap} disabled={!a || !b || a === b} className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-black uppercase tracking-widest text-white disabled:opacity-40">
+          <ArrowLeftRight size={14} /> Trocar
+        </button>
+        {message && <p role="status" className="text-xs font-bold text-emerald-700">{message}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
 function FinalsCard({ draft, published, modality, groupKeys, onEdit }) {
   const [preview, setPreview] = useState(false);
   const finals = draft.finals?.[modality] ?? [];
@@ -254,6 +300,7 @@ export function TournamentSetup({ draft, published, modality, onEdit }) {
             <GroupCard key={g} draft={draft} published={published} modality={modality} groupKey={g} onEdit={onEdit} />
           ))}
           <FinalsCard draft={draft} published={published} modality={modality} groupKeys={groupKeys} onEdit={onEdit} />
+          <SwapCard draft={draft} modality={modality} onEdit={onEdit} />
         </>
       )}
     </div>
