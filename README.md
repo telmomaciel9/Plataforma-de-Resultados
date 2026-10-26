@@ -1,6 +1,6 @@
 # Resultados · Live results platform for student competitions
 
-[![CI](https://github.com/telmomaciel9/gata/actions/workflows/ci.yml/badge.svg)](https://github.com/telmomaciel9/gata/actions/workflows/ci.yml)
+[![CI](https://github.com/telmomaciel9/Plataforma-de-Resultados/actions/workflows/ci.yml/badge.svg)](https://github.com/telmomaciel9/Plataforma-de-Resultados/actions/workflows/ci.yml)
 
 **Live:** [gata2026.vercel.app](https://gata2026.vercel.app)
 
@@ -18,13 +18,15 @@ Mobile-first platform for running sports competitions: pick a competition, follo
 - **Automatic bracket.** A match side can be a team or a reference such as "winner of the group A final" or "loser of semi-final 1". Teams move up as soon as a result is in, and draws can be settled with a tiebreak (penalties, golden point). The admin can only pick references that do not create a cycle.
 - **Reusable for other tournaments, set up from the app.** Organisers change the name and edition, add or remove sports and groups, and manage each group's teams (renaming a team updates every match). One tap generates a group's whole knockout for any number of teams, with byes for the top seeds, and the knockout stage between group winners for any number of groups, all wired with "winner of match X" / "loser of match Y". After generating, two teams can swap places (also across groups) in every match that has not started. Generating is blocked once a match in that group has started.
 - **Secure by default.** Row Level Security lets anyone read but only signed-in admins write. The app detects a write silently blocked by RLS instead of reporting success.
-- **Tested logic.** All tournament rules live in plain TypeScript (`lib/tournament/`, no React or Supabase) with 138 Vitest tests, plus component tests (Testing Library) for the bracket, its simulation, the tournament setup panel and the new competition form. CI runs lint, type checks, tests and a production build on every push.
+- **Tested logic.** All tournament rules live in plain TypeScript (`lib/tournament/`, no React or Supabase) with 147 Vitest tests, plus component tests (Testing Library) for the bracket, its simulation, the tournament setup panel, the new competition form and the admin sign-in. CI runs lint, type checks, tests and a production build on every push.
 
 ## Features
 
 **Public view**
 - Home page with every competition; old links to the 2026 tournament still work
-- Follow your team: a page per team (`/c/<competition>/equipa/<team>`) with its record, the match it is playing now or plays next, what comes next if it wins or loses, and every match across all sports; the team you follow is remembered on your phone
+- Competitions with groups and then a knockout stage, or a straight knockout with no groups
+- Only the public pages are visible; a discreet button in the corner of the header lets organisers sign in, and only then do the editing tools appear
+- Follow your team: a page per team (`/c/<competition>/equipa/<team>`) with its record, the match it is playing now or plays next, what comes next if it wins or loses, and its matches grouped by sport with a record per sport; the team you follow is remembered on your phone
 - Every match shows whether it is upcoming, live or finished, plus its time
 - **Bracket view** of each group and of the knockout stage, drawn as a tree from the first matches to the final. Links come from the match references or, for hand-typed team names, are worked out from who won each earlier match
 - **Simulate**: tap the team you think wins each unfinished match and see who would go through; nothing is saved
@@ -73,8 +75,8 @@ Requirements: Node.js 20 or newer (22.18+ for `npm run novo-torneio`) and a free
 **1. Install**
 
 ```bash
-git clone https://github.com/telmomaciel9/gata.git
-cd gata
+git clone https://github.com/telmomaciel9/Plataforma-de-Resultados.git
+cd Plataforma-de-Resultados
 npm install
 ```
 
@@ -103,7 +105,7 @@ create table app_state (
 
 **5. Create the admin users** under Authentication → Users in Supabase.
 
-**6. Create competitions** from the home page: sign in ("És da organização?"), then "Nova competição". [`tournament.config.json`](tournament.config.json) sets the platform name and the defaults for new competitions; its `id` is the competition that old links (without `/c/<id>`) open. Optionally, `npm run novo-torneio` writes `supabase/novo-torneio.sql` to create that competition from the SQL editor instead.
+**6. Create competitions** from the home page: sign in with the key button in the top-right corner, then "Nova competição" (groups and then a knockout stage, or a straight knockout). [`tournament.config.json`](tournament.config.json) sets the platform name and the defaults for new competitions; its `id` is the competition that old links (without `/c/<id>`) open. Optionally, `npm run novo-torneio` writes `supabase/novo-torneio.sql` to create that competition from the SQL editor instead.
 
 **7. Run**
 
@@ -154,7 +156,7 @@ app/
 ├── c/[id]/equipa/[slug]/       # Team page
 ├── equipa/[slug]/page.jsx      # Old team links, redirected to the 2026 competition
 ├── NewCompetitionForm.jsx      # New competition form (+ test)
-├── AdminLogin.jsx              # Admin sign-in
+├── AdminLogin.jsx              # Admin sign-in and the discreet header button (+ test)
 ├── ui.jsx                      # Shared components (header, match row, status badge)
 ├── Bracket.jsx                 # Bracket view and simulation (+ Bracket.test.jsx)
 ├── TournamentSetup.jsx         # Admin: tournament, sports, groups, teams, generate brackets (+ test)
