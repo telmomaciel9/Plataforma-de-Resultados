@@ -17,13 +17,16 @@ Mobile-first web app used to run the sports tournament at **Gata na Praia 2026**
 - **Automatic bracket.** A match side can be a team or a reference such as "winner of the group A final" or "loser of semi-final 1". Teams move up as soon as a result is in, and draws can be settled with a tiebreak (penalties, golden point). The admin can only pick references that do not create a cycle.
 - **Reusable for other tournaments.** Name, sports and groups live in [`tournament.config.json`](tournament.config.json); `npm run novo-torneio` generates the SQL for a new tournament with the knockout stage already wired to the groups.
 - **Secure by default.** Row Level Security lets anyone read but only signed-in admins write. The app detects a write silently blocked by RLS instead of reporting success.
-- **Tested logic.** All tournament rules live in plain TypeScript (`lib/tournament/`, no React or Supabase) with 72 Vitest tests. CI runs lint, type checks, tests and a production build on every push.
+- **Tested logic.** All tournament rules live in plain TypeScript (`lib/tournament/`, no React or Supabase) with 85 Vitest tests, plus component tests for the bracket and its simulation (Testing Library). CI runs lint, type checks, tests and a production build on every push.
 
 ## Features
 
 **Public view**
 - Follow your team: a page per team (`/equipa/<team>`) with its record, the match it is playing now or plays next, what comes next if it wins or loses, and every match across all sports; the team you follow is remembered on your phone
-- Match time and a "live" badge while a match is being played
+- Every match shows whether it is upcoming, live or finished, plus its time
+- **Bracket view** of each group and of the knockout stage, drawn as a tree from the first matches to the final. Links come from the match references or, for hand-typed team names, are worked out from who won each earlier match
+- **Simulate**: tap the team you think wins each unfinished match and see who would go through; nothing is saved
+- Shareable links to a sport, group and view, e.g. `?modalidade=Voleibol&grupo=Finais&vista=quadro`
 - Pick a sport and a group or the knockout stage
 - See every match with its pitch, teams and score; winners highlighted, unplayed matches shown as "–"
 - Knockout stage with semi-finals, 3rd/4th place match and final
@@ -33,7 +36,7 @@ Mobile-first web app used to run the sports tournament at **Gata na Praia 2026**
 - Add, edit and delete matches in any group or in the knockout stage
 - Choose each side from the teams, a group winner, or the winner or loser of another match
 - Tiebreak winner for drawn matches
-- Match time and a one-tap "live" switch
+- Match time and status (upcoming, live, finished); only a finished match sends its winner to the next round, so a partial score never advances anyone
 - Publish all changes in one save, or discard them; warning before leaving with unpublished changes
 
 ## Tech stack
@@ -149,7 +152,8 @@ app/
 ├── layout.jsx                  # Root layout and metadata
 ├── page.jsx                    # Public view, "my team" shortcut and admin panel
 ├── equipa/[slug]/page.jsx      # Team page
-├── ui.jsx                      # Shared components (header, match row, live badge)
+├── ui.jsx                      # Shared components (header, match row, status badge)
+├── Bracket.jsx                 # Bracket view and simulation (+ Bracket.test.jsx)
 └── globals.css                 # Tailwind entry point
 lib/
 ├── appState.ts                 # Supabase: load, versioned save, live subscription
@@ -159,6 +163,7 @@ lib/
     ├── edits.ts / publish.ts   #   admin edits and conflict-safe publishing
     ├── slots.ts                #   what each match side can point to, cycle checks
     ├── team.ts                 #   a team's matches, next match and what comes next
+    ├── bracket.ts              #   bracket tree of a group or the knockout stage; simulation
     └── config.ts               #   tournament config and new-tournament template
 scripts/novo-torneio.mjs        # Generates the SQL for a new tournament
 supabase/                       # RLS policies, version column and Realtime

@@ -5,12 +5,13 @@ import {
   ChevronRight, Lock, LogOut, Plus, Save, Trash2, Edit3, Users
 } from "lucide-react";
 import {
-  addEdit, allTeams, applyEdits, isPlaceholder, matchTeams, needsTiebreak, nextMatch, publishEdits, resolveTournament,
+  addEdit, allTeams, applyEdits, isPlaceholder, matchStatus, matchTeams, needsTiebreak, nextMatch, publishEdits, resolveTournament,
   slotOptions, teamMatches, teamSlug,
 } from "@/lib/tournament";
 import { appStateStore, supabase } from "@/lib/appState";
 import { getMyTeam, setMyTeam, useTournament } from "@/lib/useTournament";
-import { Card, CardContent, CardHeader, CardTitle, Header, LiveBadge, LiveIndicator, LoadingOrError, MatchRow, scoreText } from "@/app/ui";
+import { Card, CardContent, CardHeader, CardTitle, Header, LiveBadge, LiveIndicator, LoadingOrError, MatchRow, STATUS_LABELS, scoreText } from "@/app/ui";
+import { BracketView } from "@/app/Bracket";
 import config from "@/tournament.config.json";
 
 const defaultStage = (group) => (group === "Finais" ? "Final" : "Ronda 1");
@@ -145,6 +146,7 @@ export default function Page() {
   const [saving, setSaving] = useState(false);
   const [user, setUser] = useState(null);
   const [tab, setTab] = useState("public");
+  const [view, setView] = useState("list");
   const [modality, setModality] = useState(config.modalities[0]);
   const [group, setGroup] = useState(config.groups[0]);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -155,6 +157,21 @@ export default function Page() {
   const [loggingIn, setLoggingIn] = useState(false);
 
   const dirty = edits.length > 0;
+
+  // Modalidade, grupo e vista ficam no endereço, para se poder partilhar, por exemplo,
+  // ?vista=quadro&modalidade=Voleibol&grupo=Finais.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (config.modalities.includes(params.get("modalidade"))) setModality(params.get("modalidade"));
+    if (params.get("grupo")) setGroup(params.get("grupo"));
+    if (params.get("vista") === "quadro") setView("bracket");
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams({ modalidade: modality, grupo: group });
+    if (view === "bracket") params.set("vista", "quadro");
+    window.history.replaceState(null, "", `?${params}`);
+  }, [modality, group, view]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
@@ -249,7 +266,7 @@ export default function Page() {
         )}
       </Header>
 
-      <div className="px-4 space-y-6 max-w-md mx-auto">
+      <div className={`px-4 space-y-6 max-w-md mx-auto ${tab === "public" && view === "bracket" ? "md:max-w-4xl" : ""}`}>
         {tab === "public" && teams.length > 0 && <MyTeamCard state={published} teams={teams} />}
 
         {/* TAB SWITCHER */}
@@ -271,14 +288,25 @@ export default function Page() {
 
         {tab === "public" ? (
           <Card>
-            <CardHeader>
+            <CardHeader className="flex-wrap gap-2">
                 <CardTitle>{modality} — {group === "Finais" ? "Fase Final" : `Grupo ${group}`}</CardTitle>
-                <LiveIndicator live={live} onRefresh={fetchData} />
+                <div className="flex items-center gap-3 ml-auto">
+                  <div className="flex rounded-lg bg-slate-100 p-0.5" role="group" aria-label="Vista">
+                    {[["list", "Lista"], ["bracket", "Quadro"]].map(([key, label]) => (
+                      <button key={key} onClick={() => setView(key)} aria-pressed={view === key} className={`rounded-md px-2 py-1 text-[10px] font-black uppercase tracking-widest ${view === key ? "bg-white text-indigo-700 shadow-sm" : "text-slate-400"}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <LiveIndicator live={live} onRefresh={fetchData} />
+                </div>
             </CardHeader>
-            <CardContent className="divide-y divide-slate-50">
-              {publicMatches.length > 0
-                ? publicMatches.map(m => <MatchRow key={m.id} match={m} teamHref={teamHref} />)
-                : <div className="text-center py-10 text-slate-400 text-sm italic font-medium">Nenhum jogo registado aqui.</div>}
+            <CardContent className={view === "list" ? "divide-y divide-slate-50" : ""}>
+              {view === "bracket"
+                ? <BracketView state={published} modality={modality} group={group} />
+                : publicMatches.length > 0
+                  ? publicMatches.map(m => <MatchRow key={m.id} match={m} teamHref={teamHref} />)
+                  : <div className="text-center py-10 text-slate-400 text-sm italic font-medium">Nenhum jogo registado aqui.</div>}
               {loadError && <p role="alert" className="pt-4 text-xs text-red-600 text-center">Não foi possível atualizar: {loadError}</p>}
             </CardContent>
           </Card>
@@ -320,13 +348,22 @@ export default function Page() {
                         <Edit3 size={12} className="text-slate-400 shrink-0" />
                         <input value={m.stage} onChange={e => updateMatch(m, 'stage', e.target.value)} className="text-[10px] font-black text-indigo-500 uppercase bg-transparent flex-1 min-w-0 outline-none" placeholder="EX: FINAL" />
                         <input type="time" value={m.time || ""} aria-label="Hora" onChange={e => updateMatch(m, 'time', e.target.value)} className="text-xs font-bold text-slate-500 bg-slate-50 rounded-lg px-2 py-1 outline-none ring-2 ring-slate-100 focus:ring-indigo-500" />
-                        <button
-                          onClick={() => updateMatch(m, 'status', m.status === "live" ? "" : "live")}
-                          aria-pressed={m.status === "live"}
-                          className={`text-[10px] font-black uppercase tracking-widest rounded-lg px-2 py-1.5 transition-colors ${m.status === "live" ? "bg-red-600 text-white" : "bg-slate-100 text-slate-400 hover:text-red-600"}`}
-                        >
-                          {m.status === "live" ? "A decorrer" : "Iniciar"}
-                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 mb-3" role="group" aria-label="Estado do jogo">
+                        {[["upcoming", "upcoming", "bg-white text-indigo-700"], ["live", "live", "bg-red-600 text-white"], ["played", "finished", "bg-slate-700 text-white"]].map(([key, value, active]) => {
+                          const current = matchStatus(m);
+                          return (
+                            <button
+                              key={key}
+                              onClick={() => updateMatch(m, 'status', value)}
+                              aria-pressed={current === key}
+                              className={`rounded-lg py-1.5 text-[10px] font-black uppercase tracking-widest transition-colors ${current === key ? `${active} shadow-sm` : "text-slate-400 hover:text-slate-600"}`}
+                            >
+                              {STATUS_LABELS[key]}
+                            </button>
+                          );
+                        })}
                       </div>
 
                       {(() => {

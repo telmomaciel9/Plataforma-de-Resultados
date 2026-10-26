@@ -57,8 +57,22 @@ export function LoadingOrError({ loadError, onRetry }) {
 
 export function LiveBadge() {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-red-600">
+    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-red-600 whitespace-nowrap">
       <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" /> A decorrer
+    </span>
+  );
+}
+
+export const STATUS_LABELS = { upcoming: "Por começar", live: "A decorrer", played: "Terminado" };
+
+/** Selo do estado do jogo: por começar, a decorrer ou terminado. */
+export function StatusBadge({ match }) {
+  const status = matchStatus(match);
+  if (status === "live") return <LiveBadge />;
+  const style = status === "played" ? "bg-slate-100 text-slate-500" : "bg-indigo-50 text-indigo-500";
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-widest whitespace-nowrap ${style}`}>
+      {STATUS_LABELS[status]}
     </span>
   );
 }
@@ -80,7 +94,7 @@ export function MatchRow({ match: m, highlight, teamHref, subtitle, className = 
         <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">
           {subtitle ? `${subtitle} · ` : ""}{m.stage}{m.time ? ` · ${m.time}` : ""}
         </div>
-        {status === "live" && <LiveBadge />}
+        <StatusBadge match={m} />
       </div>
       {[[m.home, m.homeScore], [m.away, m.awayScore]].map(([team, score], i) => (
         <div key={i} className={`flex justify-between items-center gap-3 ${i ? "mt-1" : ""}`}>
