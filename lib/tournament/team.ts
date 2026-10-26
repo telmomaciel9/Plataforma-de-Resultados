@@ -1,14 +1,8 @@
 import { FINALS } from "./edits";
-import { TO_BE_DECIDED, groupFinal, hasResult, isPlaceholder, parseScore, resolveTournament, winnerOf } from "./resolve";
+import {
+  TO_BE_DECIDED, groupFinal, isPlaceholder, matchStatus, parseScore, resolveTournament, winnerOf, type MatchStatus,
+} from "./resolve";
 import type { Match, TournamentState } from "./types";
-
-export type MatchStatus = "live" | "played" | "upcoming";
-
-/** "live" se o admin o marcou a decorrer; "played" se tem resultado; senão "upcoming". */
-export function matchStatus(match: Match): MatchStatus {
-  if (match.status === "live") return "live";
-  return hasResult(match) ? "played" : "upcoming";
-}
 
 /** Endereço de uma equipa: "5 - A Ganza está na Areia" → "5-a-ganza-esta-na-areia". */
 export function teamSlug(name: string): string {

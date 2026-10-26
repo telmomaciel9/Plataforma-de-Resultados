@@ -74,10 +74,25 @@ describe("allTeams / findTeam", () => {
 });
 
 describe("matchStatus", () => {
-  it("a decorrer ganha ao resultado parcial", () => {
-    expect(matchStatus(match("x", "A", "B", "3", "1", { status: "live" }))).toBe("live");
+  it("sem estado indicado: terminado se tiver resultado, senão por começar", () => {
     expect(matchStatus(match("x", "A", "B", "3", "1"))).toBe("played");
     expect(matchStatus(match("x", "A", "B", "3", ""))).toBe("upcoming");
+  });
+
+  it("o estado indicado pelo admin ganha ao resultado", () => {
+    expect(matchStatus(match("x", "A", "B", "3", "1", { status: "live" }))).toBe("live");
+    expect(matchStatus(match("x", "A", "B", "3", "1", { status: "upcoming" }))).toBe("upcoming");
+    expect(matchStatus(match("x", "A", "B", "", "", { status: "finished" }))).toBe("played");
+  });
+});
+
+describe("jogos a decorrer não fazem ninguém avançar", () => {
+  it("o resultado parcial não conta até o jogo terminar", () => {
+    const state = tournament();
+    state.groups.Voleibol.A.matches[1] = match("J2", "9 - Reabilitação", "19 - Sede", "15", "10", { status: "live" });
+    expect(teamMatches(state, "9 - Reabilitação").map((m) => m.match.id)).toEqual(["J2"]);
+    state.groups.Voleibol.A.matches[1].status = "finished";
+    expect(teamMatches(state, "9 - Reabilitação").map((m) => m.match.id)).toEqual(["J2", "F"]);
   });
 });
 

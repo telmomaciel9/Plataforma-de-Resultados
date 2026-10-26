@@ -14,6 +14,20 @@ export function hasResult(match: Match): boolean {
   return parseScore(match.homeScore) !== null && parseScore(match.awayScore) !== null;
 }
 
+/** "played" = terminado. */
+export type MatchStatus = "upcoming" | "live" | "played";
+
+/**
+ * Estado do jogo: o que o admin indicou ("upcoming", "live", "finished") ou, se não
+ * indicou nada, terminado quando tem resultado e por começar quando não tem.
+ */
+export function matchStatus(match: Match): MatchStatus {
+  if (match.status === "live") return "live";
+  if (match.status === "upcoming") return "upcoming";
+  if (match.status === "finished") return "played";
+  return hasResult(match) ? "played" : "upcoming";
+}
+
 /**
  * Vencedor de um jogo cujos lados já são nomes de equipas.
  * Em caso de empate usa tiebreakWinner, mas só se for uma das duas equipas.
@@ -89,6 +103,8 @@ function createResolver(state: TournamentState) {
   function outcome(id: string, pick: (m: Match) => string | null): string | null {
     const s = sides(id);
     if (!s || s.home.team === null || s.away.team === null) return null;
+    // Um resultado parcial (jogo a decorrer) não faz ninguém avançar.
+    if (matchStatus(byId.get(id)!) !== "played") return null;
     return pick({ ...byId.get(id)!, home: s.home.team, away: s.away.team });
   }
 

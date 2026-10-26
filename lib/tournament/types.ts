@@ -21,7 +21,11 @@ export interface Match {
   tiebreakWinner?: string;
   /** Hora prevista, "HH:MM". */
   time?: string;
-  /** "live" enquanto o jogo está a decorrer (o resultado pode ser parcial); "" nos outros casos. */
+  /**
+   * Estado indicado pelo admin: "upcoming" (por começar), "live" (a decorrer, o resultado
+   * pode ser parcial) ou "finished" (terminado). Vazio: terminado se tiver resultado.
+   * Só um jogo terminado decide quem avança.
+   */
   status?: string;
 }
 
