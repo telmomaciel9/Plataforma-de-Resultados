@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/telmomaciel9/Plataforma-de-Resultados/actions/workflows/ci.yml/badge.svg)](https://github.com/telmomaciel9/Plataforma-de-Resultados/actions/workflows/ci.yml)
 
-**Live:** [gata2026.vercel.app](https://gata2026.vercel.app)
+**Live:** [plataforma-de-resultados.vercel.app](https://plataforma-de-resultados.vercel.app)
 
 Mobile-first platform for running sports competitions: pick a competition, follow fixtures and results live, and let organisers set up teams and brackets from their phones. It started as the app for the sports tournament at **Gata na Praia 2026**, an event organised by the University of Minho Students' Union (AAUMinho), where players and spectators followed every match while the organisers entered scores from the pitch.
 
