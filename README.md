@@ -15,9 +15,9 @@ Mobile-first web app used to run the sports tournament at **Gata na Praia 2026**
 - **Live scores.** Results change on every open phone as soon as an organiser publishes them (Supabase Realtime), and the page catches up when a phone comes back from the background.
 - **Several organisers at once, without lost updates.** Each admin keeps a list of their own changes instead of a copy of the tournament. Publishing applies those changes on top of the latest version and only saves if nobody else saved in between (optimistic concurrency on a `version` column); otherwise it retries. Admins are told when they overwrote someone else's value or edited a match that was deleted meanwhile.
 - **Automatic bracket.** A match side can be a team or a reference such as "winner of the group A final" or "loser of semi-final 1". Teams move up as soon as a result is in, and draws can be settled with a tiebreak (penalties, golden point). The admin can only pick references that do not create a cycle.
-- **Reusable for other tournaments.** Name, sports and groups live in [`tournament.config.json`](tournament.config.json); `npm run novo-torneio` generates the SQL for a new tournament with the knockout stage already wired to the groups.
+- **Reusable for other tournaments, set up from the app.** Organisers change the name and edition, add or remove sports and groups, and manage each group's teams (renaming a team updates every match). One tap generates a group's whole knockout for any number of teams, with byes for the top seeds, and the knockout stage between group winners for any number of groups, all wired with "winner of match X" / "loser of match Y". Generating is blocked once a match in that group has started.
 - **Secure by default.** Row Level Security lets anyone read but only signed-in admins write. The app detects a write silently blocked by RLS instead of reporting success.
-- **Tested logic.** All tournament rules live in plain TypeScript (`lib/tournament/`, no React or Supabase) with 85 Vitest tests, plus component tests for the bracket and its simulation (Testing Library). CI runs lint, type checks, tests and a production build on every push.
+- **Tested logic.** All tournament rules live in plain TypeScript (`lib/tournament/`, no React or Supabase) with 122 Vitest tests, plus component tests (Testing Library) for the bracket, its simulation and the tournament setup panel. CI runs lint, type checks, tests and a production build on every push.
 
 ## Features
 
@@ -33,6 +33,7 @@ Mobile-first web app used to run the sports tournament at **Gata na Praia 2026**
 
 **Admin view**
 - Email and password sign-in with Supabase Auth
+- **Tournament and teams:** name, edition and page title; sports; groups; teams per group in seed order; generate a group's matches or the knockout stage, with a bracket preview before publishing
 - Add, edit and delete matches in any group or in the knockout stage
 - Choose each side from the teams, a group winner, or the winner or loser of another match
 - Tiebreak winner for drawn matches
@@ -96,7 +97,7 @@ create table app_state (
 - [`supabase/policies.sql`](supabase/policies.sql): everyone can read, only signed-in admins can update, nobody can insert or delete rows from the app.
 - [`supabase/realtime-e-versao.sql`](supabase/realtime-e-versao.sql): the `version` column used for concurrent publishing, and Realtime for the table. The app still works without it, with no live updates and last save wins.
 
-**5. Create the tournament.** Edit [`tournament.config.json`](tournament.config.json) (a new `id` for each tournament), then:
+**5. Create the tournament.** Edit [`tournament.config.json`](tournament.config.json) (a new `id` for each tournament; name, sports and groups are only the starting point, everything else is set up later in the admin under "Torneio e equipas"), then:
 
 ```bash
 npm run novo-torneio
@@ -154,6 +155,7 @@ app/
 ├── equipa/[slug]/page.jsx      # Team page
 ├── ui.jsx                      # Shared components (header, match row, status badge)
 ├── Bracket.jsx                 # Bracket view and simulation (+ Bracket.test.jsx)
+├── TournamentSetup.jsx         # Admin: tournament, sports, groups, teams, generate brackets (+ test)
 └── globals.css                 # Tailwind entry point
 lib/
 ├── appState.ts                 # Supabase: load, versioned save, live subscription
@@ -164,7 +166,8 @@ lib/
     ├── slots.ts                #   what each match side can point to, cycle checks
     ├── team.ts                 #   a team's matches, next match and what comes next
     ├── bracket.ts              #   bracket tree of a group or the knockout stage; simulation
-    └── config.ts               #   tournament config and new-tournament template
+    ├── generate.ts             #   generated knockouts for groups and the knockout stage
+    └── config.ts               #   tournament config, settings and new-tournament template
 scripts/novo-torneio.mjs        # Generates the SQL for a new tournament
 supabase/                       # RLS policies, version column and Realtime
 tournament.config.json          # Name, sports and groups of this tournament
