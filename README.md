@@ -8,6 +8,8 @@ Mobile-first platform for running sports competitions: pick a competition, follo
 
 **In numbers (Gata na Praia 2026):** 27 teams · 3 sports (volleyball, handball, football) · 81 matches · scores pushed live to every open phone.
 
+<img src="screenshot.png" alt="Results platform on a phone" width="320" />
+
 ## Highlights
 
 - **Many competitions, one app.** The home page lists every competition; each one lives at its own address (`/c/<competition>`). Organisers create a competition from the app (name, edition, sports, and either groups followed by a knockout stage or a straight knockout) and it opens straight into team setup.
