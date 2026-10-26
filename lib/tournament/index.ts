@@ -8,3 +8,4 @@ export * from "./team";
 export * from "./bracket";
 export * from "./generate";
 export * from "./swap";
+export * from "./competition";

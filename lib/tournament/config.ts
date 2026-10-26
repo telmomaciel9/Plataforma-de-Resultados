@@ -4,7 +4,13 @@ import type { Match, TournamentSettings, TournamentState } from "./types";
 
 /** Configuração de um torneio (ver tournament.config.json). */
 export interface TournamentConfig {
-  /** id da linha em app_state. Um torneio novo precisa de um id novo. */
+  /** Nome da plataforma, no menu de competições. */
+  platformName?: string;
+  platformDescription?: string;
+  /**
+   * id da linha em app_state da competição criada por `npm run novo-torneio`; os
+   * endereços antigos (sem /c/<id>) levam a ela. Um torneio novo precisa de um id novo.
+   */
   id: string;
   /** Nome curto mostrado no topo da app. */
   name: string;
