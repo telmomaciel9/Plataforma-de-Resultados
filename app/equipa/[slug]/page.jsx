@@ -2,7 +2,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Star } from "lucide-react";
-import { allTeams, findTeam, nextMatch, prospects, teamMatches, teamSlug } from "@/lib/tournament";
+import { allTeams, findTeam, nextMatch, prospects, teamMatches, teamSlug, tournamentSettings } from "@/lib/tournament";
+import config from "@/tournament.config.json";
 import { getMyTeam, setMyTeam, useTournament } from "@/lib/useTournament";
 import { Card, CardContent, CardHeader, CardTitle, Header, LiveIndicator, LoadingOrError, MatchRow, scoreText } from "@/app/ui";
 
@@ -26,6 +27,8 @@ export default function TeamPage({ params }) {
 
   if (!published) return <LoadingOrError loadError={loadError} onRetry={fetchData} />;
 
+  const settings = tournamentSettings(published, config);
+
   const teamHref = (name) => (teamSlugs.has(teamSlug(name)) && teamSlug(name) !== slug ? `/equipa/${teamSlug(name)}` : null);
   const toggleFollow = () => {
     setMyTeam(following ? null : slug);
@@ -35,7 +38,7 @@ export default function TeamPage({ params }) {
   if (!team) {
     return (
       <div className="min-h-screen bg-slate-50 pb-24 font-sans text-slate-900">
-        <Header title="Equipa" />
+        <Header title="Equipa" settings={settings} />
         <div className="px-4 max-w-md mx-auto space-y-4 text-center">
           <p className="font-bold">Não encontrámos esta equipa.</p>
           <Link href="/" className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">Ver todos os resultados</Link>
@@ -51,7 +54,7 @@ export default function TeamPage({ params }) {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans text-slate-900">
-      <Header title={team.name}>
+      <Header title={team.name} settings={settings}>
         <button
           onClick={toggleFollow}
           aria-pressed={following}

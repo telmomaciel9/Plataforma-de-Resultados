@@ -13,13 +13,14 @@ export const Badge = ({ children, className = "" }) => <span className={`px-2 py
 
 export const scoreText = (score) => (score === "" || score === null || score === undefined ? "–" : score);
 
-export function Header({ title, children }) {
+/** settings: nome e edição do torneio (tournamentSettings); sem settings usa a configuração. */
+export function Header({ title, settings = config, children }) {
   return (
     <div className="bg-indigo-700 p-8 pt-12 pb-10 text-white rounded-b-[40px] shadow-2xl mb-6 relative overflow-hidden">
       <div className="absolute -top-10 -right-10 opacity-10 rotate-12"><Trophy size={180} /></div>
       <div className="relative z-10 flex justify-between items-start gap-4">
         <div className="min-w-0">
-          <Badge className="bg-indigo-500/40 text-white border-none mb-2 tracking-widest">{config.name} {config.edition}</Badge>
+          <Badge className="bg-indigo-500/40 text-white border-none mb-2 tracking-widest">{settings.name} {settings.edition}</Badge>
           <h1 className="text-3xl font-black tracking-tighter uppercase italic break-words">{title}</h1>
         </div>
         {children}
