@@ -1,23 +1,19 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
-  Trophy, RefreshCw, Lock, LogOut, Plus, Save, Trash2, Edit3
+  ChevronRight, Lock, LogOut, Plus, Save, Trash2, Edit3, Users
 } from "lucide-react";
 import {
-  addEdit, applyEdits, isPlaceholder, matchTeams, needsTiebreak, parseScore, publishEdits, resolveTournament, slotOptions, winnerOf,
+  addEdit, allTeams, applyEdits, isPlaceholder, matchTeams, needsTiebreak, nextMatch, publishEdits, resolveTournament,
+  slotOptions, teamMatches, teamSlug,
 } from "@/lib/tournament";
-import { appStateStore, loadAppState, subscribeToAppState, supabase } from "@/lib/appState";
+import { appStateStore, supabase } from "@/lib/appState";
+import { getMyTeam, setMyTeam, useTournament } from "@/lib/useTournament";
+import { Card, CardContent, CardHeader, CardTitle, Header, LiveBadge, LiveIndicator, LoadingOrError, MatchRow, scoreText } from "@/app/ui";
 import config from "@/tournament.config.json";
 
-// --- COMPONENTES VISUAIS ESTILIZADOS ---
-const Card = ({ children, className = "" }) => <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden ${className}`}>{children}</div>;
-const CardHeader = ({ children, className = "" }) => <div className={`p-4 border-b border-slate-50 flex justify-between items-center ${className}`}>{children}</div>;
-const CardTitle = ({ children, className = "" }) => <h3 className={`font-bold text-slate-800 text-sm uppercase tracking-widest ${className}`}>{children}</h3>;
-const CardContent = ({ children, className = "" }) => <div className={`p-4 ${className}`}>{children}</div>;
-const Badge = ({ children, className = "" }) => <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 ${className}`}>{children}</span>;
-
 const defaultStage = (group) => (group === "Finais" ? "Final" : "Ronda 1");
-const scoreText = (score) => (score === "" || score === null || score === undefined ? "–" : score);
 
 function matchesOf(state, modality, group) {
   if (!state) return [];
@@ -89,6 +85,52 @@ function SlotPicker({ value, options, resolved, onChange }) {
   );
 }
 
+/** Atalho para a equipa que a pessoa segue, ou um seletor para escolher uma. */
+function MyTeamCard({ state, teams }) {
+  // Lido depois de montar: o localStorage não existe no servidor.
+  const [slug, setSlug] = useState(null);
+  useEffect(() => setSlug(getMyTeam()), []);
+
+  const team = teams.find(t => t.slug === slug);
+  if (!team) {
+    return (
+      <label className="flex items-center gap-3 bg-white rounded-2xl shadow-sm p-4 ring-2 ring-transparent focus-within:ring-indigo-500">
+        <Users size={18} className="text-indigo-600 shrink-0" />
+        <select
+          value=""
+          onChange={e => { setMyTeam(e.target.value); window.location.href = `/equipa/${e.target.value}`; }}
+          className="flex-1 min-w-0 bg-transparent font-bold text-sm outline-none"
+        >
+          <option value="" disabled>Segue a tua equipa…</option>
+          {teams.map(t => <option key={t.slug} value={t.slug}>{t.name}</option>)}
+        </select>
+      </label>
+    );
+  }
+
+  const next = nextMatch(teamMatches(state, team.name));
+  return (
+    <Link href={`/equipa/${team.slug}`} className="block bg-white rounded-2xl shadow-sm p-4 hover:ring-2 hover:ring-indigo-200 transition-all">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] font-black uppercase tracking-widest text-indigo-400">A minha equipa</div>
+          <div className="font-black text-slate-800 truncate">{team.name}</div>
+          <div className="text-xs font-bold text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+            {next ? (
+              <>
+                {next.status === "live" ? <LiveBadge /> : <span>Próximo:</span>}
+                <span>{next.modality} · {next.match.stage}{next.match.time ? ` · ${next.match.time}` : ""} · vs {next.opponent}</span>
+                {next.status === "live" && <span className="text-red-600">{scoreText(next.teamScore)}–{scoreText(next.opponentScore)}</span>}
+              </>
+            ) : <span>Sem jogos por jogar.</span>}
+          </div>
+        </div>
+        <ChevronRight size={18} className="text-slate-300 shrink-0" />
+      </div>
+    </Link>
+  );
+}
+
 function describeConflict({ edit, reason, current }) {
   if (reason === "missing") return `Um jogo que alteraste já tinha sido apagado por outro admin (${edit.matchId}).`;
   return `${edit.matchId}: outro admin tinha mudado "${current}"; ficou o teu valor "${edit.to}".`;
@@ -98,10 +140,8 @@ export default function Page() {
   // published = o que está no Supabase (separador Público), atualizado em tempo real.
   // edits = alterações do admin por publicar; o rascunho é published + edits, por isso
   // o que outros admins publicam aparece logo no rascunho sem perder as edições.
-  const [published, setPublished] = useState(null);
+  const { published, setPublished, live, loadError, fetchData } = useTournament();
   const [edits, setEdits] = useState([]);
-  const [live, setLive] = useState(false);
-  const [loadError, setLoadError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [user, setUser] = useState(null);
   const [tab, setTab] = useState("public");
@@ -116,30 +156,11 @@ export default function Page() {
 
   const dirty = edits.length > 0;
 
-  const fetchData = useCallback(async () => {
-    try {
-      const { state } = await loadAppState();
-      setPublished(state);
-      setLoadError(null);
-    } catch (error) {
-      setLoadError(error.message);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchData();
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
-    const unsubscribe = subscribeToAppState(({ state }) => setPublished(state), setLive);
-    // Telemóveis cortam a ligação em segundo plano: ao voltar à página, vai buscar o mais recente.
-    const onVisible = () => { if (document.visibilityState === "visible") fetchData(); };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      authListener.subscription.unsubscribe();
-      unsubscribe();
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [fetchData]);
+    return () => authListener.subscription.unsubscribe();
+  }, []);
 
   // Avisa antes de fechar ou recarregar a página com alterações por publicar.
   useEffect(() => {
@@ -206,17 +227,11 @@ export default function Page() {
   };
 
   const resolved = useMemo(() => (published ? resolveTournament(published) : null), [published]);
+  const teams = useMemo(() => (published ? allTeams(published) : []), [published]);
+  const teamSlugs = useMemo(() => new Set(teams.map(t => t.slug)), [teams]);
+  const teamHref = (name) => (teamSlugs.has(teamSlug(name)) ? `/equipa/${teamSlug(name)}` : null);
 
-  if (loadError && !published) {
-    return (
-      <div className="p-10 text-center font-sans space-y-4">
-        <p className="font-bold">Não foi possível carregar o torneio.</p>
-        <p className="text-sm text-slate-500">{loadError}</p>
-        <button onClick={fetchData} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">Tentar de novo</button>
-      </div>
-    );
-  }
-  if (!published) return <div className="p-10 text-center font-bold font-sans">A carregar torneio...</div>;
+  if (!published) return <LoadingOrError loadError={loadError} onRetry={fetchData} />;
 
   const modalities = published.modalities || config.modalities;
   // Grupos da configuração, mais algum que exista nos dados e não esteja na configuração.
@@ -226,23 +241,17 @@ export default function Page() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans text-slate-900">
-      {/* HEADER DINÂMICO */}
-      <div className="bg-indigo-700 p-8 pt-12 pb-10 text-white rounded-b-[40px] shadow-2xl mb-6 relative overflow-hidden">
-        <div className="absolute -top-10 -right-10 opacity-10 rotate-12"><Trophy size={180} /></div>
-        <div className="relative z-10 flex justify-between items-start">
-          <div>
-            <Badge className="bg-indigo-500/40 text-white border-none mb-2 tracking-widest">{config.name} {config.edition}</Badge>
-            <h1 className="text-3xl font-black tracking-tighter uppercase italic">Resultados</h1>
-          </div>
-          {user && (
-            <button onClick={() => supabase.auth.signOut()} aria-label="Terminar sessão" className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all">
-              <LogOut size={18} />
-            </button>
-          )}
-        </div>
-      </div>
+      <Header title="Resultados">
+        {user && (
+          <button onClick={() => supabase.auth.signOut()} aria-label="Terminar sessão" className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all">
+            <LogOut size={18} />
+          </button>
+        )}
+      </Header>
 
       <div className="px-4 space-y-6 max-w-md mx-auto">
+        {tab === "public" && teams.length > 0 && <MyTeamCard state={published} teams={teams} />}
+
         {/* TAB SWITCHER */}
         <div className="flex bg-slate-200/50 p-1.5 rounded-2xl">
           <button onClick={() => setTab("public")} className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all ${tab === "public" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}>PÚBLICO</button>
@@ -264,35 +273,12 @@ export default function Page() {
           <Card>
             <CardHeader>
                 <CardTitle>{modality} — {group === "Finais" ? "Fase Final" : `Grupo ${group}`}</CardTitle>
-                {live ? (
-                  <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-emerald-600" title="Os resultados atualizam-se sozinhos">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Ao vivo
-                  </span>
-                ) : (
-                  <button onClick={fetchData} aria-label="Atualizar resultados" className="text-slate-400 hover:text-indigo-600 transition-colors">
-                    <RefreshCw size={14} />
-                  </button>
-                )}
+                <LiveIndicator live={live} onRefresh={fetchData} />
             </CardHeader>
             <CardContent className="divide-y divide-slate-50">
-              {publicMatches.length > 0 ? publicMatches.map(m => {
-                const winner = winnerOf(m);
-                const wonOnTiebreak = winner && parseScore(m.homeScore) === parseScore(m.awayScore);
-                return (
-                  <div key={m.id} className="py-5 first:pt-0 last:pb-0">
-                    <div className="text-[10px] font-black text-indigo-400 uppercase mb-2 tracking-widest">{m.stage}</div>
-                    {[[m.home, m.homeScore], [m.away, m.awayScore]].map(([team, score], i) => (
-                      <div key={i} className={`flex justify-between items-center ${i ? "mt-1" : ""}`}>
-                        <span className={`font-bold ${winner && winner !== team ? "text-slate-400" : "text-slate-700"}`}>
-                          {team}
-                          {wonOnTiebreak && winner === team && <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-amber-600">desempate</span>}
-                        </span>
-                        <span className={`text-2xl font-black ${winner && winner !== team ? "text-slate-300" : "text-indigo-900"}`}>{scoreText(score)}</span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              }) : <div className="text-center py-10 text-slate-400 text-sm italic font-medium">Nenhum jogo registado aqui.</div>}
+              {publicMatches.length > 0
+                ? publicMatches.map(m => <MatchRow key={m.id} match={m} teamHref={teamHref} />)
+                : <div className="text-center py-10 text-slate-400 text-sm italic font-medium">Nenhum jogo registado aqui.</div>}
               {loadError && <p role="alert" className="pt-4 text-xs text-red-600 text-center">Não foi possível atualizar: {loadError}</p>}
             </CardContent>
           </Card>
@@ -330,9 +316,17 @@ export default function Page() {
                     <Card key={m.id} className="p-4 bg-white relative border-l-4 border-l-indigo-500">
                       <button onClick={() => deleteMatch(m.id)} aria-label="Apagar jogo" className="absolute top-3 right-3 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
 
-                      <div className="flex items-center gap-2 mb-3">
-                        <Edit3 size={12} className="text-slate-400" />
-                        <input value={m.stage} onChange={e => updateMatch(m,'stage', e.target.value)} className="text-[10px] font-black text-indigo-500 uppercase bg-transparent w-full outline-none" placeholder="EX: FINAL" />
+                      <div className="flex items-center gap-2 mb-3 pr-6">
+                        <Edit3 size={12} className="text-slate-400 shrink-0" />
+                        <input value={m.stage} onChange={e => updateMatch(m, 'stage', e.target.value)} className="text-[10px] font-black text-indigo-500 uppercase bg-transparent flex-1 min-w-0 outline-none" placeholder="EX: FINAL" />
+                        <input type="time" value={m.time || ""} aria-label="Hora" onChange={e => updateMatch(m, 'time', e.target.value)} className="text-xs font-bold text-slate-500 bg-slate-50 rounded-lg px-2 py-1 outline-none ring-2 ring-slate-100 focus:ring-indigo-500" />
+                        <button
+                          onClick={() => updateMatch(m, 'status', m.status === "live" ? "" : "live")}
+                          aria-pressed={m.status === "live"}
+                          className={`text-[10px] font-black uppercase tracking-widest rounded-lg px-2 py-1.5 transition-colors ${m.status === "live" ? "bg-red-600 text-white" : "bg-slate-100 text-slate-400 hover:text-red-600"}`}
+                        >
+                          {m.status === "live" ? "A decorrer" : "Iniciar"}
+                        </button>
                       </div>
 
                       {(() => {
