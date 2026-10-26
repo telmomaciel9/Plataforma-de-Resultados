@@ -3,8 +3,8 @@ import config from "../../tournament.config.json";
 import {
   applyEdits,
   emptyTournament,
-  finalsTemplate,
   resolveTournament,
+  tournamentSettings,
   validateConfig,
   type TournamentConfig,
 } from "./index";
@@ -34,25 +34,16 @@ describe("validateConfig", () => {
   });
 });
 
-describe("finalsTemplate", () => {
-  it("4 grupos: meias, 3.º/4.º lugar e final", () => {
-    const finals = finalsTemplate("Voleibol", ["A", "B", "C", "D"]);
-    expect(finals.map((m) => [m.id, m.home, m.away])).toEqual([
-      ["VOL-MF1", "WIN_GROUP:Voleibol:A", "WIN_GROUP:Voleibol:B"],
-      ["VOL-MF2", "WIN_GROUP:Voleibol:C", "WIN_GROUP:Voleibol:D"],
-      ["VOL-3LUG", "LOSS:VOL-MF1", "LOSS:VOL-MF2"],
-      ["VOL-FINAL", "WIN:VOL-MF1", "WIN:VOL-MF2"],
-    ]);
+describe("tournamentSettings", () => {
+  it("usa os textos da base de dados e completa com a configuração", () => {
+    const state = { modalities: [], groups: {}, finals: {}, settings: { name: "Taça AAUM", title: " " } };
+    expect(tournamentSettings(state, base)).toEqual({ name: "Taça AAUM", edition: "'27", title: "Teste 2027" });
   });
 
-  it("2 grupos: só a final; 1 ou 3 grupos: nada gerado", () => {
-    expect(finalsTemplate("Futebol", ["A", "B"]).map((m) => m.id)).toEqual(["FUT-FINAL"]);
-    expect(finalsTemplate("Futebol", ["A"])).toEqual([]);
-    expect(finalsTemplate("Futebol", ["A", "B", "C"])).toEqual([]);
-  });
-
-  it("ids sem acentos nem espaços", () => {
-    expect(finalsTemplate("Ténis de mesa", ["A", "B"])[0].id).toBe("TEN-FINAL");
+  it("sem textos na base de dados usa a configuração; edição vazia apaga a edição", () => {
+    expect(tournamentSettings(null, base)).toEqual({ name: "Teste", edition: "'27", title: "Teste 2027" });
+    const state = { modalities: [], groups: {}, finals: {}, settings: { edition: "" } };
+    expect(tournamentSettings(state, base).edition).toBe("");
   });
 });
 

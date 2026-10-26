@@ -1,4 +1,6 @@
-import type { Match, TournamentState } from "./types";
+// Com extensão: scripts/novo-torneio.mjs corre este ficheiro diretamente no Node.
+import { generateFinals } from "./generate.ts";
+import type { Match, TournamentSettings, TournamentState } from "./types";
 
 /** Configuração de um torneio (ver tournament.config.json). */
 export interface TournamentConfig {
@@ -33,35 +35,22 @@ export function validateConfig(config: TournamentConfig): string[] {
   return problems;
 }
 
-/** Prefixo dos ids dos jogos de uma modalidade: "Voleibol" → "VOL". */
-function prefix(modality: string): string {
-  const letters = modality.normalize("NFD").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-  return letters.slice(0, 3) || "MOD";
+/** Nome, edição e título: os da base de dados (editáveis no admin) ou os da configuração. */
+export function tournamentSettings(
+  state: TournamentState | null | undefined,
+  config: Pick<TournamentConfig, "name" | "edition" | "title">,
+): Required<TournamentSettings> {
+  const s = state?.settings ?? {};
+  return {
+    name: s.name?.trim() || config.name,
+    edition: s.edition?.trim() ?? config.edition,
+    title: s.title?.trim() || config.title,
+  };
 }
 
-function slot(id: string, stage: string, home: string, away: string): Match {
-  return { id, stage, home, away, homeScore: "", awayScore: "", tiebreakWinner: "" };
-}
-
-/**
- * Fase final a partir dos vencedores dos grupos, em eliminatória.
- * 1 grupo: sem fase final. 2 grupos: final. 4 grupos: meias, 3.º/4.º e final.
- * Outros números: meias/quartos não se geram sozinhos e os jogos criam-se no admin.
- */
+/** Fase final a partir dos vencedores dos grupos (ver generateFinals). */
 export function finalsTemplate(modality: string, groups: string[]): Match[] {
-  const p = prefix(modality);
-  const winner = (g: string) => `WIN_GROUP:${modality}:${g}`;
-  if (groups.length === 2) return [slot(`${p}-FINAL`, "Final", winner(groups[0]), winner(groups[1]))];
-  if (groups.length === 4) {
-    const [a, b, c, d] = groups;
-    return [
-      slot(`${p}-MF1`, "Meia-final", winner(a), winner(b)),
-      slot(`${p}-MF2`, "Meia-final", winner(c), winner(d)),
-      slot(`${p}-3LUG`, "3.º/4.º lugar", `LOSS:${p}-MF1`, `LOSS:${p}-MF2`),
-      slot(`${p}-FINAL`, "Final", `WIN:${p}-MF1`, `WIN:${p}-MF2`),
-    ];
-  }
-  return [];
+  return generateFinals(modality, groups);
 }
 
 /** Estado inicial de um torneio novo: grupos vazios e o quadro da fase final já ligado aos grupos. */
