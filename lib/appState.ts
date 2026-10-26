@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Snapshot, Store, TournamentState } from "@/lib/tournament";
+import config from "@/tournament.config.json";
 
-export const STATE_ROW_ID = "gata-na-praia-2026-official";
+export const STATE_ROW_ID = config.id;
 
 export const supabase: SupabaseClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL as string,
