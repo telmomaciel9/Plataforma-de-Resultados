@@ -8,7 +8,8 @@ Mobile-first platform for running sports competitions: pick a competition, follo
 
 **In numbers (Gata na Praia 2026):** 27 teams · 3 sports (volleyball, handball, football) · 81 matches · scores pushed live to every open phone.
 
-<img src="screenshot.png" alt="Results platform on a phone" width="320" />
+<img src="screenshot.png" />
+
 
 ## Highlights
 
