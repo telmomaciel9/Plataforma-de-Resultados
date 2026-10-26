@@ -19,6 +19,10 @@ export interface Match {
   awayScore: string;
   /** Equipa que ganhou o desempate (penáltis, ponto de ouro) quando o resultado é empate. */
   tiebreakWinner?: string;
+  /** Hora prevista, "HH:MM". */
+  time?: string;
+  /** "live" enquanto o jogo está a decorrer (o resultado pode ser parcial); "" nos outros casos. */
+  status?: string;
 }
 
 export interface Group {

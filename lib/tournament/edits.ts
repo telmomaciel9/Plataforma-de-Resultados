@@ -1,7 +1,7 @@
 import type { Match, TournamentState } from "./types";
 
 /** Campos de um jogo que o admin pode editar. */
-export type EditableField = "stage" | "home" | "away" | "homeScore" | "awayScore" | "tiebreakWinner";
+export type EditableField = "stage" | "home" | "away" | "homeScore" | "awayScore" | "tiebreakWinner" | "time" | "status";
 
 /** "Finais" designa a fase final; qualquer outro valor é a chave de um grupo. */
 export const FINALS = "Finais";
