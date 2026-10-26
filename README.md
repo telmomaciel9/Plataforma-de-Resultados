@@ -17,11 +17,13 @@ Mobile-first web app used to run the sports tournament at **Gata na Praia 2026**
 - **Automatic bracket.** A match side can be a team or a reference such as "winner of the group A final" or "loser of semi-final 1". Teams move up as soon as a result is in, and draws can be settled with a tiebreak (penalties, golden point). The admin can only pick references that do not create a cycle.
 - **Reusable for other tournaments.** Name, sports and groups live in [`tournament.config.json`](tournament.config.json); `npm run novo-torneio` generates the SQL for a new tournament with the knockout stage already wired to the groups.
 - **Secure by default.** Row Level Security lets anyone read but only signed-in admins write. The app detects a write silently blocked by RLS instead of reporting success.
-- **Tested logic.** All tournament rules live in plain TypeScript (`lib/tournament/`, no React or Supabase) with 58 Vitest tests. CI runs lint, type checks, tests and a production build on every push.
+- **Tested logic.** All tournament rules live in plain TypeScript (`lib/tournament/`, no React or Supabase) with 72 Vitest tests. CI runs lint, type checks, tests and a production build on every push.
 
 ## Features
 
 **Public view**
+- Follow your team: a page per team (`/equipa/<team>`) with its record, the match it is playing now or plays next, what comes next if it wins or loses, and every match across all sports; the team you follow is remembered on your phone
+- Match time and a "live" badge while a match is being played
 - Pick a sport and a group or the knockout stage
 - See every match with its pitch, teams and score; winners highlighted, unplayed matches shown as "–"
 - Knockout stage with semi-finals, 3rd/4th place match and final
@@ -31,6 +33,7 @@ Mobile-first web app used to run the sports tournament at **Gata na Praia 2026**
 - Add, edit and delete matches in any group or in the knockout stage
 - Choose each side from the teams, a group winner, or the winner or loser of another match
 - Tiebreak winner for drawn matches
+- Match time and a one-tap "live" switch
 - Publish all changes in one save, or discard them; warning before leaving with unpublished changes
 
 ## Tech stack
@@ -144,14 +147,18 @@ npm run build
 ```
 app/
 ├── layout.jsx                  # Root layout and metadata
-├── page.jsx                    # The app: public view and admin panel
+├── page.jsx                    # Public view, "my team" shortcut and admin panel
+├── equipa/[slug]/page.jsx      # Team page
+├── ui.jsx                      # Shared components (header, match row, live badge)
 └── globals.css                 # Tailwind entry point
 lib/
 ├── appState.ts                 # Supabase: load, versioned save, live subscription
+├── useTournament.js            # React hook: live tournament data; followed team
 └── tournament/                 # Tournament rules in TypeScript, with tests
     ├── resolve.ts              #   winners, losers and group winners
     ├── edits.ts / publish.ts   #   admin edits and conflict-safe publishing
     ├── slots.ts                #   what each match side can point to, cycle checks
+    ├── team.ts                 #   a team's matches, next match and what comes next
     └── config.ts               #   tournament config and new-tournament template
 scripts/novo-torneio.mjs        # Generates the SQL for a new tournament
 supabase/                       # RLS policies, version column and Realtime
