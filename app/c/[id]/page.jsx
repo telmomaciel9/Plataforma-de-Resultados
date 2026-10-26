@@ -2,15 +2,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  ChevronRight, Lock, LogOut, Plus, Save, Trash2, Edit3, Users
+  ArrowLeft, ChevronRight, LogOut, Plus, Save, Trash2, Edit3, Users
 } from "lucide-react";
 import {
   addEdit, allTeams, applyEdits, conflictMessage, isPlaceholder, tournamentSettings, matchStatus, matchTeams, needsTiebreak, nextMatch, publishEdits, resolveTournament,
   slotOptions, teamMatches, teamSlug,
 } from "@/lib/tournament";
-import { appStateStore, supabase } from "@/lib/appState";
-import { getMyTeam, setMyTeam, useTournament } from "@/lib/useTournament";
-import { Card, CardContent, CardHeader, CardTitle, Header, LiveBadge, LiveIndicator, LoadingOrError, MatchRow, STATUS_LABELS, scoreText } from "@/app/ui";
+import { competitionStore, supabase } from "@/lib/appState";
+import { getMyTeam, setMyTeam, useAdminUser, useTournament } from "@/lib/useTournament";
+import {
+  Card, CardContent, CardHeader, CardTitle, Header, LiveBadge, LiveIndicator, LoadingOrError, MatchRow, STATUS_LABELS, scoreText,
+} from "@/app/ui";
+import { AdminLogin } from "@/app/AdminLogin";
 import { BracketView } from "@/app/Bracket";
 import { TournamentSetup } from "@/app/TournamentSetup";
 import config from "@/tournament.config.json";
@@ -88,10 +91,11 @@ function SlotPicker({ value, options, resolved, onChange }) {
 }
 
 /** Atalho para a equipa que a pessoa segue, ou um seletor para escolher uma. */
-function MyTeamCard({ state, teams }) {
+function MyTeamCard({ competition, state, teams }) {
   // Lido depois de montar: o localStorage não existe no servidor.
   const [slug, setSlug] = useState(null);
-  useEffect(() => setSlug(getMyTeam()), []);
+  useEffect(() => setSlug(getMyTeam(competition)), [competition]);
+  const href = (teamSlug) => `/c/${competition}/equipa/${teamSlug}`;
 
   const team = teams.find(t => t.slug === slug);
   if (!team) {
@@ -100,7 +104,7 @@ function MyTeamCard({ state, teams }) {
         <Users size={18} className="text-indigo-600 shrink-0" />
         <select
           value=""
-          onChange={e => { setMyTeam(e.target.value); window.location.href = `/equipa/${e.target.value}`; }}
+          onChange={e => { setMyTeam(competition, e.target.value); window.location.href = href(e.target.value); }}
           className="flex-1 min-w-0 bg-transparent font-bold text-sm outline-none"
         >
           <option value="" disabled>Segue a tua equipa…</option>
@@ -112,7 +116,7 @@ function MyTeamCard({ state, teams }) {
 
   const next = nextMatch(teamMatches(state, team.name));
   return (
-    <Link href={`/equipa/${team.slug}`} className="block bg-white rounded-2xl shadow-sm p-4 hover:ring-2 hover:ring-indigo-200 transition-all">
+    <Link href={href(team.slug)} className="block bg-white rounded-2xl shadow-sm p-4 hover:ring-2 hover:ring-indigo-200 transition-all">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[10px] font-black uppercase tracking-widest text-indigo-400">A minha equipa</div>
@@ -133,14 +137,15 @@ function MyTeamCard({ state, teams }) {
   );
 }
 
-export default function Page() {
+export default function CompetitionPage({ params }) {
+  const competition = decodeURIComponent(params.id);
   // published = o que está no Supabase (separador Público), atualizado em tempo real.
   // edits = alterações do admin por publicar; o rascunho é published + edits, por isso
   // o que outros admins publicam aparece logo no rascunho sem perder as edições.
-  const { published, setPublished, live, loadError, fetchData } = useTournament();
+  const { published, setPublished, live, loadError, fetchData } = useTournament(competition);
   const [edits, setEdits] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [user, setUser] = useState(null);
+  const user = useAdminUser();
   const [tab, setTab] = useState("public");
   const [view, setView] = useState("list");
   const [adminView, setAdminView] = useState("matches");
@@ -149,32 +154,28 @@ export default function Page() {
   const [showAddModal, setShowAddModal] = useState(false);
 
   const [newMatch, setNewMatch] = useState({ home: "", away: "", stage: defaultStage(config.groups[0]) });
-  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
-  const [loginError, setLoginError] = useState(null);
-  const [loggingIn, setLoggingIn] = useState(false);
 
   const dirty = edits.length > 0;
 
   // Modalidade, grupo e vista ficam no endereço, para se poder partilhar, por exemplo,
-  // ?vista=quadro&modalidade=Voleibol&grupo=Finais.
+  // ?vista=quadro&modalidade=Voleibol&grupo=Finais. ?area=torneio abre o admin na
+  // configuração (usado ao criar uma competição).
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("modalidade")) setModality(params.get("modalidade"));
-    if (params.get("grupo")) setGroup(params.get("grupo"));
-    if (params.get("vista") === "quadro") setView("bracket");
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("modalidade")) setModality(query.get("modalidade"));
+    if (query.get("grupo")) setGroup(query.get("grupo"));
+    if (query.get("vista") === "quadro") setView("bracket");
+    if (query.get("area") === "torneio") {
+      setTab("admin");
+      setAdminView("setup");
+    }
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams({ modalidade: modality, grupo: group });
-    if (view === "bracket") params.set("vista", "quadro");
-    window.history.replaceState(null, "", `?${params}`);
+    const query = new URLSearchParams({ modalidade: modality, grupo: group });
+    if (view === "bracket") query.set("vista", "quadro");
+    window.history.replaceState(null, "", `?${query}`);
   }, [modality, group, view]);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
-    return () => authListener.subscription.unsubscribe();
-  }, []);
 
   // Avisa antes de fechar ou recarregar a página com alterações por publicar.
   useEffect(() => {
@@ -187,7 +188,7 @@ export default function Page() {
   const saveAll = async () => {
     setSaving(true);
     try {
-      const result = await publishEdits(appStateStore, edits);
+      const result = await publishEdits(competitionStore(competition), edits);
       if (!result.ok) {
         alert("Outros admins estão a publicar ao mesmo tempo. As tuas alterações continuam aqui; tenta de novo.");
         return;
@@ -202,15 +203,6 @@ export default function Page() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const login = async (e) => {
-    e.preventDefault();
-    setLoginError(null);
-    setLoggingIn(true);
-    const { error } = await supabase.auth.signInWithPassword(loginForm);
-    setLoggingIn(false);
-    if (error) setLoginError(error.message === "Invalid login credentials" ? "Email ou password incorretos." : error.message);
   };
 
   const draft = useMemo(() => (published ? applyEdits(published, edits).state : null), [published, edits]);
@@ -262,7 +254,7 @@ export default function Page() {
   const resolved = useMemo(() => (published ? resolveTournament(published) : null), [published]);
   const teams = useMemo(() => (published ? allTeams(published) : []), [published]);
   const teamSlugs = useMemo(() => new Set(teams.map(t => t.slug)), [teams]);
-  const teamHref = (name) => (teamSlugs.has(teamSlug(name)) ? `/equipa/${teamSlug(name)}` : null);
+  const teamHref = (name) => (teamSlugs.has(teamSlug(name)) ? `/c/${competition}/equipa/${teamSlug(name)}` : null);
 
   if (!published) return <LoadingOrError loadError={loadError} onRetry={fetchData} />;
 
@@ -280,7 +272,8 @@ export default function Page() {
       </Header>
 
       <div className={`px-4 space-y-6 max-w-md mx-auto ${tab === "public" && view === "bracket" ? "md:max-w-4xl" : ""}`}>
-        {tab === "public" && teams.length > 0 && <MyTeamCard state={published} teams={teams} />}
+        <Link href="/" className="-mt-2 flex items-center gap-1 text-sm font-bold text-indigo-600"><ArrowLeft size={16} /> Competições</Link>
+        {tab === "public" && teams.length > 0 && <MyTeamCard competition={competition} state={published} teams={teams} />}
 
         {/* TAB SWITCHER */}
         <div className="flex bg-slate-200/50 p-1.5 rounded-2xl">
@@ -326,15 +319,7 @@ export default function Page() {
         ) : (
           <div className="space-y-4">
             {!user ? (
-              <Card className="p-6">
-                <form onSubmit={login}>
-                  <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-800"><Lock size={18} className="text-indigo-600"/> Acesso Reservado</h3>
-                  <input type="email" required autoComplete="username" placeholder="Email" className="w-full p-4 rounded-xl bg-slate-50 border-none ring-2 ring-slate-100 focus:ring-indigo-500 outline-none mb-3 text-sm" onChange={e => setLoginForm({...loginForm, email: e.target.value})} />
-                  <input type="password" required autoComplete="current-password" placeholder="Password" className="w-full p-4 rounded-xl bg-slate-50 border-none ring-2 ring-slate-100 focus:ring-indigo-500 outline-none mb-4 text-sm" onChange={e => setLoginForm({...loginForm, password: e.target.value})} />
-                  {loginError && <p role="alert" className="text-sm text-red-600 font-medium mb-4">{loginError}</p>}
-                  <button type="submit" disabled={loggingIn} className="w-full bg-indigo-600 text-white p-4 rounded-xl font-black shadow-lg shadow-indigo-100 active:scale-95 transition-all disabled:opacity-60">{loggingIn ? "A ENTRAR..." : "ENTRAR"}</button>
-                </form>
-              </Card>
+              <AdminLogin />
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-200/50 p-1" role="group" aria-label="Área do admin">

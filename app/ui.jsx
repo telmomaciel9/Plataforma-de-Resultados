@@ -46,12 +46,15 @@ export function LiveIndicator({ live, onRefresh }) {
 }
 
 export function LoadingOrError({ loadError, onRetry }) {
-  if (!loadError) return <div className="p-10 text-center font-bold font-sans">A carregar torneio...</div>;
+  if (!loadError) return <div className="p-10 text-center font-bold font-sans">A carregar...</div>;
   return (
     <div className="p-10 text-center font-sans space-y-4">
-      <p className="font-bold">Não foi possível carregar o torneio.</p>
+      <p className="font-bold">Não foi possível carregar a competição.</p>
       <p className="text-sm text-slate-500">{loadError}</p>
-      <button onClick={onRetry} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">Tentar de novo</button>
+      <div className="flex flex-wrap justify-center gap-2">
+        <button onClick={onRetry} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">Tentar de novo</button>
+        <a href="/" className="bg-slate-100 text-slate-600 px-6 py-3 rounded-xl font-bold">Ver competições</a>
+      </div>
     </div>
   );
 }

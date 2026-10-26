@@ -14,10 +14,12 @@ const OUTCOME = {
 };
 
 export default function TeamPage({ params }) {
+  const competition = decodeURIComponent(params.id);
   const slug = decodeURIComponent(params.slug);
-  const { published, live, loadError, fetchData } = useTournament();
+  const results = `/c/${competition}`;
+  const { published, live, loadError, fetchData } = useTournament(competition);
   const [following, setFollowing] = useState(false);
-  useEffect(() => setFollowing(getMyTeam() === slug), [slug]);
+  useEffect(() => setFollowing(getMyTeam(competition) === slug), [competition, slug]);
 
   const team = useMemo(() => (published ? findTeam(published, slug) : undefined), [published, slug]);
   const teamSlugs = useMemo(() => new Set(published ? allTeams(published).map(t => t.slug) : []), [published]);
@@ -29,9 +31,9 @@ export default function TeamPage({ params }) {
 
   const settings = tournamentSettings(published, config);
 
-  const teamHref = (name) => (teamSlugs.has(teamSlug(name)) && teamSlug(name) !== slug ? `/equipa/${teamSlug(name)}` : null);
+  const teamHref = (name) => (teamSlugs.has(teamSlug(name)) && teamSlug(name) !== slug ? `${results}/equipa/${teamSlug(name)}` : null);
   const toggleFollow = () => {
-    setMyTeam(following ? null : slug);
+    setMyTeam(competition, following ? null : slug);
     setFollowing(!following);
   };
 
@@ -41,7 +43,7 @@ export default function TeamPage({ params }) {
         <Header title="Equipa" settings={settings} />
         <div className="px-4 max-w-md mx-auto space-y-4 text-center">
           <p className="font-bold">Não encontrámos esta equipa.</p>
-          <Link href="/" className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">Ver todos os resultados</Link>
+          <Link href={results} className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold">Ver todos os resultados</Link>
         </div>
       </div>
     );
@@ -67,7 +69,7 @@ export default function TeamPage({ params }) {
 
       <div className="px-4 space-y-6 max-w-md mx-auto">
         <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-1 text-sm font-bold text-indigo-600"><ArrowLeft size={16} /> Resultados</Link>
+          <Link href={results} className="flex items-center gap-1 text-sm font-bold text-indigo-600"><ArrowLeft size={16} /> Resultados</Link>
           <LiveIndicator live={live} onRefresh={fetchData} />
         </div>
 

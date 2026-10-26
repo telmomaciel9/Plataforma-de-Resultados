@@ -2,8 +2,8 @@ import './globals.css'
 import config from '@/tournament.config.json'
 
 export const metadata = {
-  title: config.title,
-  description: config.description,
+  title: config.platformName,
+  description: config.platformDescription,
 }
 
 export default function RootLayout({ children }) {
