@@ -1,0 +1,9 @@
+{
+  "id": "gata-na-praia-2026-official",
+  "name": "Gata na Praia",
+  "edition": "'26",
+  "title": "Gata na Praia 2026",
+  "description": "Resultados em tempo real do torneio do Gata na Praia 2026",
+  "modalities": ["Voleibol", "Andebol", "Futebol"],
+  "groups": ["A", "B", "C", "D"]
+}

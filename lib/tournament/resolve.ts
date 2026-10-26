@@ -116,7 +116,29 @@ function createResolver(state: TournamentState) {
     },
     winner: (id: string) => outcome(id, winnerOf),
     groupFinalId: (modality: string, groupKey: string) => groupFinalIds.get(`${modality}:${groupKey}`),
+    sides,
   };
+}
+
+/**
+ * Equipas de um jogo depois de resolver as referências: null num lado que ainda não se sabe.
+ * Devolve null se o jogo não existir.
+ */
+export function matchTeams(state: TournamentState, matchId: string): { home: string | null; away: string | null } | null {
+  const s = createResolver(state).sides(matchId);
+  return s ? { home: s.home.team, away: s.away.team } : null;
+}
+
+/**
+ * true se o jogo está empatado com as duas equipas conhecidas, e por isso precisa de
+ * indicar quem ganhou o desempate (penáltis, ponto de ouro) para alguém poder avançar.
+ */
+export function needsTiebreak(state: TournamentState, match: Match): boolean {
+  const home = parseScore(match.homeScore);
+  const away = parseScore(match.awayScore);
+  if (home === null || away === null || home !== away) return false;
+  const teams = matchTeams(state, match.id);
+  return !!teams && teams.home !== null && teams.away !== null;
 }
 
 /**
