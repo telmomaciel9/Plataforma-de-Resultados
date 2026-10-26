@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "novo-torneio": "node --no-warnings scripts/novo-torneio.mjs"
   },
   "dependencies": {
     "next": "14.2.35",

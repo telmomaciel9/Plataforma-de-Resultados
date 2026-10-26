@@ -1,37 +1,64 @@
 # Gata na Praia ’26 · Tournament Results
 
-Mobile-first web app for the sports tournament at **Gata na Praia 2026**, an event organised by the University of Minho Students' Union (AAUMinho). Players and spectators follow fixtures and results for **volleyball, handball and football**, while the organisers update scores from an authenticated admin area.
+[![CI](https://github.com/telmomaciel9/gata/actions/workflows/ci.yml/badge.svg)](https://github.com/telmomaciel9/gata/actions/workflows/ci.yml)
 
-<img src="screenshot.png" alt="Handball knockout results on a phone" width="300" />
+**Live:** [gata2026.vercel.app](https://gata2026.vercel.app)
+
+Mobile-first web app used to run the sports tournament at **Gata na Praia 2026**, an event organised by the University of Minho Students' Union (AAUMinho). Players and spectators followed fixtures and results on their phones while the organisers entered scores from the pitch.
+
+**In numbers:** 27 teams · 3 sports (volleyball, handball, football) · 81 matches · scores pushed live to every open phone.
+
+<img src="screenshot.png" alt="Volleyball group A results on a phone" width="320" />
+
+## Highlights
+
+- **Live scores.** Results change on every open phone as soon as an organiser publishes them (Supabase Realtime), and the page catches up when a phone comes back from the background.
+- **Several organisers at once, without lost updates.** Each admin keeps a list of their own changes instead of a copy of the tournament. Publishing applies those changes on top of the latest version and only saves if nobody else saved in between (optimistic concurrency on a `version` column); otherwise it retries. Admins are told when they overwrote someone else's value or edited a match that was deleted meanwhile.
+- **Automatic bracket.** A match side can be a team or a reference such as "winner of the group A final" or "loser of semi-final 1". Teams move up as soon as a result is in, and draws can be settled with a tiebreak (penalties, golden point). The admin can only pick references that do not create a cycle.
+- **Reusable for other tournaments.** Name, sports and groups live in [`tournament.config.json`](tournament.config.json); `npm run novo-torneio` generates the SQL for a new tournament with the knockout stage already wired to the groups.
+- **Secure by default.** Row Level Security lets anyone read but only signed-in admins write. The app detects a write silently blocked by RLS instead of reporting success.
+- **Tested logic.** All tournament rules live in plain TypeScript (`lib/tournament/`, no React or Supabase) with 58 Vitest tests. CI runs lint, type checks, tests and a production build on every push.
 
 ## Features
 
 **Public view**
-- Pick a sport and a group (A–D) or the knockout stage
-- See every match with its pitch, teams and score
+- Pick a sport and a group or the knockout stage
+- See every match with its pitch, teams and score; winners highlighted, unplayed matches shown as "–"
 - Knockout stage with semi-finals, 3rd/4th place match and final
 
 **Admin view**
 - Email and password sign-in with Supabase Auth
 - Add, edit and delete matches in any group or in the knockout stage
-- Enter scores and publish all changes in one save
-- Several admins can publish at the same time: only the matches each one changed are written, on top of the latest version, and they are told when they overwrote someone else's value
-
-**Live updates:** scores change on every open phone as soon as they are published (Supabase Realtime).
-
-All tournament data is stored as a single JSON document in Supabase (PostgreSQL), so the structure of groups and stages can change without database migrations.
+- Choose each side from the teams, a group winner, or the winner or loser of another match
+- Tiebreak winner for drawn matches
+- Publish all changes in one save, or discard them; warning before leaving with unpublished changes
 
 ## Tech stack
 
 | | |
 |---|---|
 | Framework | Next.js 14 (App Router), React 18 |
-| Backend | Supabase: PostgreSQL and Auth |
+| Backend | Supabase: PostgreSQL, Auth, Realtime, Row Level Security |
+| Language | TypeScript (tournament logic), JavaScript (UI) |
 | Styling | Tailwind CSS 3, Lucide icons |
+| Quality | Vitest, ESLint, GitHub Actions; Vercel previews for every pull request |
+
+## How it works
+
+```
+Phone (public)  ◄── Realtime ──┐
+                               │
+Admin ── edits ──► publishEdits ──► load latest ─► apply edits ─► save if version unchanged
+                               │                                     │
+                               └──────────── retry on conflict ◄─────┘
+                                             Supabase: app_state (payload jsonb, version)
+```
+
+All tournament data is one JSON document in the `app_state` table, so the structure of groups and stages can change without database migrations. Every save bumps `version` through a trigger, which is what makes concurrent publishing safe.
 
 ## Getting started
 
-Requirements: Node.js 20 or newer and a free [Supabase](https://supabase.com) project.
+Requirements: Node.js 20 or newer (22.18+ for `npm run novo-torneio`) and a free [Supabase](https://supabase.com) project.
 
 **1. Install**
 
@@ -58,43 +85,50 @@ create table app_state (
 );
 ```
 
-Insert one row with `id = 'gata-na-praia-2026-official'`. Its `payload` follows this shape:
+**4. Lock it down and turn on live updates.** The anon key ships to every browser, so Row Level Security is what stops visitors from editing results. Run, in order:
 
-```json
-{
-  "modalities": ["Voleibol", "Andebol", "Futebol"],
-  "groups": {
-    "Voleibol": { "A": { "matches": [] }, "B": { "matches": [] }, "C": { "matches": [] }, "D": { "matches": [] } },
-    "Andebol":  { "A": { "matches": [] }, "B": { "matches": [] }, "C": { "matches": [] }, "D": { "matches": [] } },
-    "Futebol":  { "A": { "matches": [] }, "B": { "matches": [] }, "C": { "matches": [] }, "D": { "matches": [] } }
-  },
-  "finals": { "Voleibol": [], "Andebol": [], "Futebol": [] }
-}
+- [`supabase/policies.sql`](supabase/policies.sql): everyone can read, only signed-in admins can update, nobody can insert or delete rows from the app.
+- [`supabase/realtime-e-versao.sql`](supabase/realtime-e-versao.sql): the `version` column used for concurrent publishing, and Realtime for the table. The app still works without it, with no live updates and last save wins.
+
+**5. Create the tournament.** Edit [`tournament.config.json`](tournament.config.json) (a new `id` for each tournament), then:
+
+```bash
+npm run novo-torneio
 ```
 
-Each match is stored as `{ "id", "home", "away", "homeScore", "awayScore", "stage" }`, plus an optional `tiebreakWinner` for drawn knockout games. Scores are strings and stay `""` until the game is played.
+Run the generated `supabase/novo-torneio.sql` in the SQL editor. It never overwrites an existing tournament with the same `id`.
 
-`home` and `away` are usually team names, but they can also point to another game, and the public view fills them in once that game has a result:
+**6. Create the admin users** under Authentication → Users in Supabase.
 
-| Slot | Meaning |
-|---|---|
-| `WIN:<match id>` | Winner of that match |
-| `LOSS:<match id>` | Loser of that match (e.g. 3rd/4th place) |
-| `WIN_GROUP:<sport>:<group>` | Winner of the group: the winner of its last match, or of `finalMatchId` if the group sets one |
-
-**4. Lock down the table.** The anon key ships to every browser, so Row Level Security is what stops visitors from editing results. Run [`supabase/policies.sql`](supabase/policies.sql) in the SQL editor: everyone can read, only signed-in admins can update, and nobody can insert or delete rows from the app.
-
-Then run [`supabase/realtime-e-versao.sql`](supabase/realtime-e-versao.sql). It adds a `version` column that every save bumps, so two admins publishing at once never overwrite each other, and turns on Realtime for the table. The app still works without it, with no live updates and last save wins.
-
-**5. Create the admin users** under Authentication → Users in Supabase.
-
-**6. Run**
+**7. Run**
 
 ```bash
 npm run dev
 ```
 
 The app runs at `http://localhost:3000`.
+
+## Data format
+
+```json
+{
+  "modalities": ["Voleibol", "Andebol", "Futebol"],
+  "groups": {
+    "Voleibol": { "A": { "matches": [] }, "B": { "matches": [] }, "C": { "matches": [] }, "D": { "matches": [] } }
+  },
+  "finals": { "Voleibol": [] }
+}
+```
+
+Each match is `{ "id", "stage", "home", "away", "homeScore", "awayScore" }`, plus an optional `tiebreakWinner` for drawn matches. Scores are strings and stay `""` until the match is played.
+
+`home` and `away` are usually team names, but they can also point to another match:
+
+| Slot | Meaning |
+|---|---|
+| `WIN:<match id>` | Winner of that match |
+| `LOSS:<match id>` | Loser of that match (e.g. 3rd/4th place) |
+| `WIN_GROUP:<sport>:<group>` | Winner of the group: the winner of its last match, or of `finalMatchId` if the group sets one |
 
 ## Checks
 
@@ -105,8 +139,6 @@ npm test            # Vitest: tournament logic
 npm run build
 ```
 
-GitHub Actions runs all four on every push and pull request. Vercel deploys `main` and creates a preview for each pull request.
-
 ## Project structure
 
 ```
@@ -114,16 +146,18 @@ app/
 ├── layout.jsx                  # Root layout and metadata
 ├── page.jsx                    # The app: public view and admin panel
 └── globals.css                 # Tailwind entry point
-lib/tournament/                 # Tournament logic in TypeScript (no React or Supabase), with tests
-lib/appState.ts                 # Supabase: load, versioned save, live subscription
-supabase/policies.sql           # Row Level Security for app_state
-supabase/realtime-e-versao.sql  # Version column and Realtime for app_state
-prototypes/
-├── page.jsx                    # Prototype: real-time updates and automatic bracket resolution
-└── gata_na_praia_mobile_app.jsx  # Prototype: shadcn/ui version with offline demo mode
+lib/
+├── appState.ts                 # Supabase: load, versioned save, live subscription
+└── tournament/                 # Tournament rules in TypeScript, with tests
+    ├── resolve.ts              #   winners, losers and group winners
+    ├── edits.ts / publish.ts   #   admin edits and conflict-safe publishing
+    ├── slots.ts                #   what each match side can point to, cycle checks
+    └── config.ts               #   tournament config and new-tournament template
+scripts/novo-torneio.mjs        # Generates the SQL for a new tournament
+supabase/                       # RLS policies, version column and Realtime
+tournament.config.json          # Name, sports and groups of this tournament
+prototypes/                     # Earlier versions, not served by Next.js
 ```
-
-The files in `prototypes/` are earlier versions and are not served by Next.js. They explore real-time score updates with Supabase Realtime, automatic progression of winners from groups to the final, and an offline demo mode backed by `localStorage`.
 
 ## Author
 

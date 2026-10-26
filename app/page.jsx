@@ -3,10 +3,11 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Trophy, RefreshCw, Lock, LogOut, Plus, Save, Trash2, Edit3
 } from "lucide-react";
-import { addEdit, applyEdits, publishEdits, resolveTournament, winnerOf } from "@/lib/tournament";
+import {
+  addEdit, applyEdits, isPlaceholder, matchTeams, needsTiebreak, parseScore, publishEdits, resolveTournament, slotOptions, winnerOf,
+} from "@/lib/tournament";
 import { appStateStore, loadAppState, subscribeToAppState, supabase } from "@/lib/appState";
-
-const GROUPS = ["A", "B", "C", "D"];
+import config from "@/tournament.config.json";
 
 // --- COMPONENTES VISUAIS ESTILIZADOS ---
 const Card = ({ children, className = "" }) => <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden ${className}`}>{children}</div>;
@@ -25,6 +26,69 @@ function matchesOf(state, modality, group) {
     : state.groups?.[modality]?.[group]?.matches || [];
 }
 
+const NEW_TEAM = "__nova_equipa__";
+
+/**
+ * Escolhe um lado do jogo: uma equipa, o vencedor/derrotado de outro jogo ou o vencedor
+ * de um grupo. "Nova equipa…" troca para um campo de texto.
+ */
+function SlotPicker({ value, options, resolved, onChange }) {
+  const [typing, setTyping] = useState(false);
+  const [text, setText] = useState("");
+  const known = options.some(o => o.value === value);
+  const commit = () => {
+    if (text.trim()) onChange(text.trim());
+    setTyping(false);
+    setText("");
+  };
+  const groups = [
+    ["Equipas", options.filter(o => o.kind === "team")],
+    ["Vencedor de grupo", options.filter(o => o.kind === "group")],
+    ["Vencedor de jogo", options.filter(o => o.kind === "winner")],
+    ["Derrotado de jogo", options.filter(o => o.kind === "loser")],
+  ].filter(([, list]) => list.length);
+
+  if (typing) {
+    return (
+      <input
+        autoFocus
+        value={text}
+        placeholder="Nome da equipa"
+        onChange={e => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") { setText(""); setTyping(false); }
+        }}
+        className="flex-1 min-w-0 h-12 text-sm font-bold text-slate-700 bg-slate-50 rounded-xl px-3 ring-2 ring-indigo-500 outline-none"
+      />
+    );
+  }
+
+  return (
+    <div className="flex-1 min-w-0">
+      <select
+        value={value || ""}
+        aria-label="Equipa"
+        onChange={e => (e.target.value === NEW_TEAM ? setTyping(true) : onChange(e.target.value))}
+        className="w-full h-12 text-sm font-bold text-slate-700 bg-transparent border-b border-slate-100 focus:border-indigo-300 outline-none truncate"
+      >
+        {!value && <option value="">Escolher equipa…</option>}
+        {value && !known && <option value={value}>{value}</option>}
+        {groups.map(([label, list]) => (
+          <optgroup key={label} label={label}>
+            {list.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </optgroup>
+        ))}
+        <option value={NEW_TEAM}>✎ Nova equipa…</option>
+      </select>
+      {isPlaceholder(value) && (
+        <div className="text-[11px] font-bold text-slate-400 mt-1">→ {resolved ?? "Por definir"}</div>
+      )}
+    </div>
+  );
+}
+
 function describeConflict({ edit, reason, current }) {
   if (reason === "missing") return `Um jogo que alteraste já tinha sido apagado por outro admin (${edit.matchId}).`;
   return `${edit.matchId}: outro admin tinha mudado "${current}"; ficou o teu valor "${edit.to}".`;
@@ -41,11 +105,11 @@ export default function Page() {
   const [saving, setSaving] = useState(false);
   const [user, setUser] = useState(null);
   const [tab, setTab] = useState("public");
-  const [modality, setModality] = useState("Voleibol");
-  const [group, setGroup] = useState("A");
+  const [modality, setModality] = useState(config.modalities[0]);
+  const [group, setGroup] = useState(config.groups[0]);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  const [newMatch, setNewMatch] = useState({ home: "", away: "", stage: defaultStage("A") });
+  const [newMatch, setNewMatch] = useState({ home: "", away: "", stage: defaultStage(config.groups[0]) });
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [loginError, setLoginError] = useState(null);
   const [loggingIn, setLoggingIn] = useState(false);
@@ -154,7 +218,9 @@ export default function Page() {
   }
   if (!published) return <div className="p-10 text-center font-bold font-sans">A carregar torneio...</div>;
 
-  const modalities = published.modalities || Object.keys(published.groups || {});
+  const modalities = published.modalities || config.modalities;
+  // Grupos da configuração, mais algum que exista nos dados e não esteja na configuração.
+  const groups = [...new Set([...config.groups, ...Object.keys(published.groups?.[modality] || {})])];
   const publicMatches = matchesOf(resolved, modality, group);
   const draftMatches = matchesOf(draft, modality, group);
 
@@ -165,7 +231,7 @@ export default function Page() {
         <div className="absolute -top-10 -right-10 opacity-10 rotate-12"><Trophy size={180} /></div>
         <div className="relative z-10 flex justify-between items-start">
           <div>
-            <Badge className="bg-indigo-500/40 text-white border-none mb-2 tracking-widest">GATA NA PRAIA &apos;26</Badge>
+            <Badge className="bg-indigo-500/40 text-white border-none mb-2 tracking-widest">{config.name} {config.edition}</Badge>
             <h1 className="text-3xl font-black tracking-tighter uppercase italic">Resultados</h1>
           </div>
           {user && (
@@ -189,7 +255,7 @@ export default function Page() {
             {modalities.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
           <select value={group} onChange={(e) => changeGroup(e.target.value)} className="bg-white p-4 rounded-2xl shadow-sm font-bold text-sm outline-none border-none ring-2 ring-transparent focus:ring-indigo-500 transition-all">
-            {GROUPS.map(g => <option key={g} value={g}>Grupo {g}</option>)}
+            {groups.map(g => <option key={g} value={g}>Grupo {g}</option>)}
             <option value="Finais" className="text-indigo-600 font-bold">🏆 FINAIS</option>
           </select>
         </div>
@@ -211,12 +277,16 @@ export default function Page() {
             <CardContent className="divide-y divide-slate-50">
               {publicMatches.length > 0 ? publicMatches.map(m => {
                 const winner = winnerOf(m);
+                const wonOnTiebreak = winner && parseScore(m.homeScore) === parseScore(m.awayScore);
                 return (
                   <div key={m.id} className="py-5 first:pt-0 last:pb-0">
                     <div className="text-[10px] font-black text-indigo-400 uppercase mb-2 tracking-widest">{m.stage}</div>
                     {[[m.home, m.homeScore], [m.away, m.awayScore]].map(([team, score], i) => (
                       <div key={i} className={`flex justify-between items-center ${i ? "mt-1" : ""}`}>
-                        <span className={`font-bold ${winner && winner !== team ? "text-slate-400" : "text-slate-700"}`}>{team}</span>
+                        <span className={`font-bold ${winner && winner !== team ? "text-slate-400" : "text-slate-700"}`}>
+                          {team}
+                          {wonOnTiebreak && winner === team && <span className="ml-2 text-[10px] font-black uppercase tracking-widest text-amber-600">desempate</span>}
+                        </span>
                         <span className={`text-2xl font-black ${winner && winner !== team ? "text-slate-300" : "text-indigo-900"}`}>{scoreText(score)}</span>
                       </div>
                     ))}
@@ -265,14 +335,30 @@ export default function Page() {
                         <input value={m.stage} onChange={e => updateMatch(m,'stage', e.target.value)} className="text-[10px] font-black text-indigo-500 uppercase bg-transparent w-full outline-none" placeholder="EX: FINAL" />
                       </div>
 
-                      <div className="flex items-center gap-4 mb-3">
-                        <input value={m.homeScore} inputMode="numeric" onChange={e => updateMatch(m,'homeScore', e.target.value)} className="w-12 h-12 text-center font-black bg-slate-50 rounded-xl ring-2 ring-slate-100 focus:ring-indigo-500 outline-none text-lg" placeholder="–" />
-                        <input value={m.home} onChange={e => updateMatch(m,'home', e.target.value)} className="text-sm font-bold text-slate-700 flex-1 bg-transparent border-b border-transparent focus:border-slate-100 outline-none" />
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <input value={m.awayScore} inputMode="numeric" onChange={e => updateMatch(m,'awayScore', e.target.value)} className="w-12 h-12 text-center font-black bg-slate-50 rounded-xl ring-2 ring-slate-100 focus:ring-indigo-500 outline-none text-lg" placeholder="–" />
-                        <input value={m.away} onChange={e => updateMatch(m,'away', e.target.value)} className="text-sm font-bold text-slate-700 flex-1 bg-transparent border-b border-transparent focus:border-slate-100 outline-none" />
-                      </div>
+                      {(() => {
+                        const options = slotOptions(draft, modality, m.id);
+                        const teams = matchTeams(draft, m.id);
+                        return (
+                          <>
+                            {[["home", "homeScore"], ["away", "awayScore"]].map(([side, scoreField], i) => (
+                              <div key={side} className={`flex items-start gap-4 ${i ? "" : "mb-3"}`}>
+                                <input value={m[scoreField]} inputMode="numeric" aria-label="Resultado" onChange={e => updateMatch(m, scoreField, e.target.value)} className="w-12 h-12 shrink-0 text-center font-black bg-slate-50 rounded-xl ring-2 ring-slate-100 focus:ring-indigo-500 outline-none text-lg" placeholder="–" />
+                                <SlotPicker value={m[side]} options={options} resolved={teams?.[side]} onChange={value => updateMatch(m, side, value)} />
+                              </div>
+                            ))}
+                            {needsTiebreak(draft, m) && (
+                              <label className="mt-3 flex items-center gap-2 text-xs font-bold text-amber-700">
+                                Empate: quem ganhou o desempate?
+                                <select value={m.tiebreakWinner || ""} onChange={e => updateMatch(m, "tiebreakWinner", e.target.value)} className="flex-1 min-w-0 bg-amber-50 rounded-lg p-2 outline-none ring-2 ring-amber-100 focus:ring-amber-400">
+                                  <option value="">Escolher…</option>
+                                  <option value={teams.home}>{teams.home}</option>
+                                  <option value={teams.away}>{teams.away}</option>
+                                </select>
+                              </label>
+                            )}
+                          </>
+                        );
+                      })()}
                     </Card>
                   ))}
                 </div>

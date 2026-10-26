@@ -1,8 +1,9 @@
-import './globals.css' // <--- ISTO TEM DE ESTAR AQUI
+import './globals.css'
+import config from '@/tournament.config.json'
 
 export const metadata = {
-  title: 'Gata na Praia 2026',
-  description: 'Resultados em tempo real',
+  title: config.title,
+  description: config.description,
 }
 
 export default function RootLayout({ children }) {
