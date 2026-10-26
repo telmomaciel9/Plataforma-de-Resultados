@@ -139,6 +139,24 @@ describe("TournamentSetup", () => {
     expect(lastEdits.find((e) => e.type === "teams").to).toEqual(["Gama", "Beta", "Alfa", "Delta"]);
   });
 
+  it("competição só com fase final: equipas na fase final e eliminatória direta", () => {
+    const state = { modalities: ["Futsal"], groups: { Futsal: {} }, finals: { Futsal: [] }, finalsTeams: { Futsal: [] } };
+    render(<Harness published={state} modality="Futsal" />);
+    expect(screen.getByText("Futsal: só fase final")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /usar grupos/i })).toBeTruthy();
+
+    const finals = within(screen.getByText("Fase final", { selector: "h3" }).closest("div.rounded-2xl"));
+    for (const name of ["Alfa", "Beta", "Gama", "Delta"]) {
+      fireEvent.change(finals.getByPlaceholderText("Nova equipa"), { target: { value: name } });
+      fireEvent.click(finals.getByLabelText("Acrescentar equipa"));
+    }
+    fireEvent.click(finals.getByRole("button", { name: /gerar fase final/i }));
+    expect(finals.getByText("Final")).toBeTruthy();
+    expect(finals.getAllByText("Alfa").length).toBeGreaterThan(0);
+    expect(lastEdits.map((e) => e.type)).toEqual(["finalsTeams", "replaceMatches"]);
+    expect(lastEdits[1].matches.map((m) => m.stage)).toEqual(["Meia-final 1", "Meia-final 2", "3.º/4.º lugar", "Final"]);
+  });
+
   it("muda o nome do torneio", () => {
     render(<Harness published={published()} />);
     fireEvent.change(screen.getByPlaceholderText("Gata na Praia"), { target: { value: "Taça AAUM" } });

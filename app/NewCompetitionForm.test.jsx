@@ -27,6 +27,19 @@ describe("NewCompetitionForm", () => {
     expect(state.finals.Basquetebol.map((m) => m.stage)).toEqual(["Final"]);
   });
 
+  it("cria uma competição só com fase final, sem pedir grupos", async () => {
+    const onCreate = vi.fn().mockResolvedValue();
+    render(<NewCompetitionForm onCreate={onCreate} onCancel={() => {}} />);
+    fill("Ex.: Taça AAUM", "Torneio Relâmpago");
+    fireEvent.change(screen.getByDisplayValue("Grupos e depois fase final"), { target: { value: "knockout" } });
+    expect(screen.queryByDisplayValue("4 grupos")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /criar competição/i }));
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    const { state } = onCreate.mock.calls[0][0];
+    expect(state.groups.Voleibol).toEqual({});
+    expect(state.finalsTeams).toEqual({ Voleibol: [], Andebol: [], Futebol: [] });
+  });
+
   it("não deixa criar sem nome nem com modalidades repetidas", () => {
     render(<NewCompetitionForm onCreate={vi.fn()} onCancel={() => {}} />);
     const button = screen.getByRole("button", { name: /criar competição/i });

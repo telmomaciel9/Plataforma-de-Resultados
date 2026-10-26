@@ -60,6 +60,9 @@ export function allTeams(state: TournamentState): Team[] {
   for (const [modality, groups] of Object.entries(resolved.groups ?? {})) {
     Object.values(groups).forEach((g) => g.teams?.forEach((t) => isTeamName(t) && add(t, modality)));
   }
+  for (const [modality, teams] of Object.entries(resolved.finalsTeams ?? {})) {
+    teams.forEach((t) => isTeamName(t) && add(t, modality));
+  }
   locate(resolved).forEach(({ match, modality }) =>
     [match.home, match.away].forEach((side) => isTeamName(side) && add(side, modality)),
   );

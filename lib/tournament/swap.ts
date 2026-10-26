@@ -21,6 +21,7 @@ function modalityMatches(state: TournamentState, modality: string): Match[] {
 export function modalityTeams(state: TournamentState, modality: string): string[] {
   const names = new Set<string>();
   Object.values(state.groups?.[modality] ?? {}).forEach((g) => g.teams?.forEach((t) => names.add(t)));
+  state.finalsTeams?.[modality]?.forEach((t) => names.add(t));
   modalityMatches(state, modality).forEach((m) =>
     [m.home, m.away].forEach((side) => side?.trim() && !isPlaceholder(side) && names.add(side)),
   );
@@ -29,7 +30,7 @@ export function modalityTeams(state: TournamentState, modality: string): string[
 
 /**
  * Troca duas equipas de lugar numa modalidade: nos jogos por começar (onde estava uma
- * passa a estar a outra) e nas listas dos grupos (também entre grupos diferentes).
+ * passa a estar a outra) e nas listas dos grupos (também entre grupos diferentes) e da fase final.
  * Os jogos já começados ou terminados não mudam. Devolve as alterações para o rascunho.
  */
 export function swapTeams(state: TournamentState, modality: string, a: string, b: string): SwapResult {
@@ -58,6 +59,10 @@ export function swapTeams(state: TournamentState, modality: string, a: string, b
     const to = from.map(other);
     if (to.some((t, i) => t !== from[i])) edits.push({ type: "teams", modality, group, from, to });
   }
+
+  const finalsFrom = state.finalsTeams?.[modality] ?? [];
+  const finalsTo = finalsFrom.map(other);
+  if (finalsTo.some((t, i) => t !== finalsFrom[i])) edits.push({ type: "finalsTeams", modality, from: finalsFrom, to: finalsTo });
 
   return { edits, changedMatches, skippedMatches };
 }

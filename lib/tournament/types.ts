@@ -50,4 +50,9 @@ export interface TournamentState {
   modalities: string[];
   groups: Record<string, Record<string, Group>>;
   finals: Record<string, Match[]>;
+  /**
+   * Equipas da fase final por modalidade, por ordem de cabeça de série. Só nas
+   * modalidades sem grupos (eliminatória direta); com grupos, a fase final vem dos vencedores.
+   */
+  finalsTeams?: Record<string, string[]>;
 }

@@ -211,15 +211,15 @@ export default function CompetitionPage({ params }) {
   // No admin mostra-se o rascunho (com modalidades e grupos acabados de criar); no público, o publicado.
   const shown = tab === "admin" && user ? draft : published;
   const modalities = shown?.modalities?.length ? shown.modalities : config.modalities;
-  const groupKeys = Object.keys(shown?.groups?.[modality] ?? {});
-  const groups = groupKeys.length ? groupKeys : config.groups;
+  // Sem grupos (competição só com fase final) mostra-se logo a fase final.
+  const groups = Object.keys(shown?.groups?.[modality] ?? {});
   const settings = tournamentSettings(published, config);
 
   // Se a modalidade ou o grupo escolhidos deixarem de existir (removidos ou endereço antigo), passa ao primeiro.
   useEffect(() => {
     if (!shown) return;
     if (!modalities.includes(modality)) setModality(modalities[0]);
-    else if (group !== "Finais" && !groups.includes(group)) setGroup(groups[0]);
+    else if (group !== "Finais" && !groups.includes(group)) setGroup(groups[0] ?? "Finais");
   }, [shown, modalities, groups, modality, group]);
 
   useEffect(() => {
@@ -282,14 +282,16 @@ export default function CompetitionPage({ params }) {
         </div>
 
         {/* SELETORES DE FILTRO */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`grid gap-3 ${groups.length ? "grid-cols-2" : "grid-cols-1"}`}>
           <select value={modality} onChange={(e) => setModality(e.target.value)} className="bg-white p-4 rounded-2xl shadow-sm font-bold text-sm outline-none border-none ring-2 ring-transparent focus:ring-indigo-500 transition-all">
             {modalities.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          <select value={group} onChange={(e) => changeGroup(e.target.value)} className="bg-white p-4 rounded-2xl shadow-sm font-bold text-sm outline-none border-none ring-2 ring-transparent focus:ring-indigo-500 transition-all">
-            {groups.map(g => <option key={g} value={g}>Grupo {g}</option>)}
-            <option value="Finais" className="text-indigo-600 font-bold">🏆 FINAIS</option>
-          </select>
+          {groups.length > 0 && (
+            <select value={group} onChange={(e) => changeGroup(e.target.value)} className="bg-white p-4 rounded-2xl shadow-sm font-bold text-sm outline-none border-none ring-2 ring-transparent focus:ring-indigo-500 transition-all">
+              {groups.map(g => <option key={g} value={g}>Grupo {g}</option>)}
+              <option value="Finais" className="text-indigo-600 font-bold">🏆 FINAIS</option>
+            </select>
+          )}
         </div>
 
         {tab === "public" ? (
