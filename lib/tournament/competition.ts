@@ -1,5 +1,4 @@
-// Com extensão: scripts/novo-torneio.mjs corre estes ficheiros diretamente no Node.
-import { generateFinals } from "./generate.ts";
+import { generateFinals } from "./generate";
 import type { TournamentSettings, TournamentState } from "./types";
 
 const LETTERS = "ABCDEFGH".split("");

@@ -9,7 +9,7 @@ export const Card = ({ children, className = "" }) => <div className={`bg-white 
 export const CardHeader = ({ children, className = "" }) => <div className={`p-4 border-b border-slate-50 flex justify-between items-center ${className}`}>{children}</div>;
 export const CardTitle = ({ children, className = "" }) => <h3 className={`font-bold text-slate-800 text-sm uppercase tracking-widest ${className}`}>{children}</h3>;
 export const CardContent = ({ children, className = "" }) => <div className={`p-4 ${className}`}>{children}</div>;
-export const Badge = ({ children, className = "" }) => <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 ${className}`}>{children}</span>;
+const Badge =({ children, className = "" }) => <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 ${className}`}>{children}</span>;
 
 export const scoreText = (score) => (score === "" || score === null || score === undefined ? "–" : score);
 
